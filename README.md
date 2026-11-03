@@ -1,5 +1,7 @@
 # 聆泊 · Lingbo Desk
 
+**简体中文** | [English](./README.en.md)
+
 Windows 桌面语音 Agent。支持持续交流、数字人展示，以及聊天期间执行文件、Office 和浏览器任务。
 
 当前版本：0.3.0。个人项目，面向 Windows x64 验证。
@@ -14,6 +16,33 @@ Windows 桌面语音 Agent。支持持续交流、数字人展示，以及聊天
 - DeepSeek 云端模型和本机 Ollama 切换。
 
 ## 工程设计
+
+```mermaid
+flowchart LR
+    desktop["桌面端 · Electron / Vue"]
+    gateway["本地后端 · Node.js"]
+    speech["语音适配 · ASR / TTS"]
+    models["DeepSeek / Ollama"]
+    worker["Agent 工作进程"]
+    storage["本地数据与任务产物"]
+
+    desktop <-->|HTTP / SSE| gateway
+    gateway <--> speech
+    gateway <--> models
+    gateway <-->|IPC / HTTP| worker
+    gateway <--> storage
+```
+
+这是职责概览图。语音适配、模型路由、任务管理和工具执行由同一个本地后端服务装配，图中的分支不代表独立微服务。
+
+| 模块 | 主要职责 |
+| --- | --- |
+| 桌面端 | 角色展示、聊天、音频采集与播放、持续监听和打断 |
+| 本地后端 | HTTP API、任务状态与事件、目录权限、动作确认和实际工具执行 |
+| 语音适配 | 阿里云语音识别、豆包语音合成、音频解码与服务转接 |
+| 语言模型 | DeepSeek 云端 API 或本机 Ollama，提供流式回答和工具调用 |
+| Agent 工作进程 | 独立运行模型与工具调用循环，请求经本地后端执行并检查完成回执 |
+| 本地数据 | 保存明确记忆、Skills 版本、任务状态、执行回执、备份与产物 |
 
 桌面端采用 Electron、Vue 3 和 TypeScript。Node.js 服务提供模型、语音、任务、权限及个人配置接口。
 
