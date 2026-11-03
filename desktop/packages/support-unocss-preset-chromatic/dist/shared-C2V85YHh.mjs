@@ -1,0 +1,334 @@
+import { MODEL_V2, fittedOklch } from "@lingbo/chromatic";
+const cssIdRE = /\.(css|postcss|sass|scss|less|stylus|styl)($|\?)/;
+function definePreset(preset) {
+	return preset;
+}
+//#endregion
+//#region src/shared.ts
+const VAR_HUE = "--chromatic-hue";
+const VAR_BRIGHTNESS = "--chromatic-bri";
+const VAR_SATURATION = "--chromatic-sat";
+const VAR_CHROMA_SHADES = {
+	50: "--chromatic-chroma-50",
+	100: "--chromatic-chroma-100",
+	200: "--chromatic-chroma-200",
+	300: "--chromatic-chroma-300",
+	400: "--chromatic-chroma-400",
+	500: "--chromatic-chroma-500",
+	600: "--chromatic-chroma-600",
+	700: "--chromatic-chroma-700",
+	800: "--chromatic-chroma-800",
+	900: "--chromatic-chroma-900",
+	950: "--chromatic-chroma-950",
+	DEFAULT: "--chromatic-chroma"
+};
+const DEFAULT_MODIFIER_UTILITY_PREFIXES = [
+	"bg",
+	"text",
+	"border",
+	"ring",
+	"fill",
+	"stroke"
+];
+const SHADES = [
+	50,
+	100,
+	200,
+	300,
+	400,
+	500,
+	600,
+	700,
+	800,
+	900,
+	950
+];
+const DEG_TO_RAD = "0.01745329252";
+const percentRE = /^\d{1,3}(?:\.\d+)?$/;
+const alphaPlaceholdersRE = /%alpha|<alpha-value>/g;
+function createBakedColorShades(baseHue, hueOffset) {
+	const defaultChroma = .18 + Math.cos(baseHue * Math.PI / 180) * .04;
+	const hue = baseHue + hueOffset;
+	return {
+		50: `color-mix(in srgb, oklch(${lightness(95)} ${chroma(`${defaultChroma * .3}`)} ${hue} / %alpha) 30%, oklch(100% 0 360 / %alpha))`,
+		100: `color-mix(in srgb, oklch(${lightness(95)} ${chroma(`${defaultChroma * .5}`)} ${hue} / %alpha) 80%, oklch(100% 0 360 / %alpha))`,
+		200: `oklch(${lightness(90)} ${chroma(`${defaultChroma * .6}`)} ${hue} / %alpha)`,
+		300: `oklch(${lightness(85)} ${chroma(`${defaultChroma * .75}`)} ${hue} / %alpha)`,
+		400: `oklch(${lightness(74)} ${chroma(`${defaultChroma * .85}`)} ${hue} / %alpha)`,
+		500: `oklch(${lightness(62)} ${chroma(`${defaultChroma}`)} ${hue} / %alpha)`,
+		600: `oklch(${lightness(54)} ${chroma(`${defaultChroma * 1.15}`)} ${hue} / %alpha)`,
+		700: `oklch(${lightness(49)} ${chroma(`${defaultChroma * 1.1}`)} ${hue} / %alpha)`,
+		800: `oklch(${lightness(42)} ${chroma(`${defaultChroma * .85}`)} ${hue} / %alpha)`,
+		900: `oklch(${lightness(37)} ${chroma(`${defaultChroma * .7}`)} ${hue} / %alpha)`,
+		950: `oklch(${lightness(29)} ${chroma(`${defaultChroma * .5}`)} ${hue} / %alpha)`,
+		DEFAULT: `oklch(${lightness(62)} ${chroma(`${defaultChroma}`)} ${hue} / %alpha)`
+	};
+}
+/** Shades of the `v2` model with every value computed at build time. */
+function createFittedBakedColorShades(baseHue, hueOffset) {
+	const shades = Object.fromEntries(SHADES.map((shade) => {
+		const { c, h, l } = fittedOklch(shade, wrapHue(baseHue + hueOffset));
+		return [shade, `oklch(${lightness(round(l * 100, 4))} ${chroma(`${round(c, 6)}`)} ${round(h, 4)} / %alpha)`];
+	}));
+	return {
+		...shades,
+		DEFAULT: shades[500]
+	};
+}
+/**
+* Custom properties of the `v2` model. Per colour: the Fourier basis `-b-cos<k>` / `-b-sin<k>` of its hue, the
+* shared hue curves of the blocks that have them (`-f<k>`), then lightness (`-l-<shade>`, 0–1), chroma
+* (`-c-<shade>`) and hue drift in degrees (`-hd-<shade>`) for each shade.
+*/
+function createFittedPreflight(baseHue, colors) {
+	const lines = [
+		`${VAR_HUE}: ${baseHue};`,
+		`${VAR_BRIGHTNESS}: 1;`,
+		`${VAR_SATURATION}: 1;`
+	];
+	const blocks = [
+		MODEL_V2.lightness,
+		MODEL_V2.chroma,
+		MODEL_V2.hueDrift
+	].filter((block) => block != null);
+	const harmonics = Math.max(...blocks.flatMap((block) => block.curves.map((curve) => harmonicsOf(curve, block.curvesHaveConst))));
+	for (const [name, hueOffset] of Object.entries(colors)) {
+		const basis = fittedVar(name, "b");
+		const angle = `(var(${VAR_HUE}) + ${hueOffset}) * ${DEG_TO_RAD}`;
+		for (let k = 1; k <= harmonics; k++) {
+			const theta = k === 1 ? angle : `${k} * ${angle}`;
+			lines.push(`${basis}-cos${k}: cos(${theta});`, `${basis}-sin${k}: sin(${theta});`);
+		}
+		lines.push(...fittedBlockDeclarations(fittedVar(name, "l"), MODEL_V2.lightness, basis, (expr) => expr));
+		lines.push(...fittedBlockDeclarations(fittedVar(name, "c"), MODEL_V2.chroma, basis, (expr) => `max(0, ${expr})`));
+		if (MODEL_V2.hueDrift) lines.push(...fittedBlockDeclarations(fittedVar(name, "hd"), MODEL_V2.hueDrift, basis, (expr) => expr));
+	}
+	return `
+:root {
+${lines.map((line) => `  ${line}`).join("\n")}
+}
+`;
+}
+/** Shades of the `v2` model reading the custom properties of {@link createFittedPreflight}. */
+function createFittedVarBasedColorShades(name, hueOffset) {
+	const shades = Object.fromEntries(SHADES.map((shade) => {
+		const l = `var(${fittedVar(name, "l")}-${shade})`;
+		const c = `var(${fittedVar(name, "c")}-${shade})`;
+		const drift = MODEL_V2.hueDrift ? ` + var(${fittedVar(name, "hd")}-${shade})` : "";
+		return [shade, `oklch(clamp(0%, calc(${l} * 100% * var(${VAR_BRIGHTNESS})), 100%) ${chroma(c)} calc(var(${VAR_HUE}) + ${hueOffset}${drift}) / %alpha)`];
+	}));
+	return {
+		...shades,
+		DEFAULT: shades[500]
+	};
+}
+function createPresetChromatic(calledFromExtension = false) {
+	return definePreset((options) => {
+		return {
+			name: "preset-chromatic",
+			...options && {
+				postprocess: [resolveLeftoverAlphaPlaceholders],
+				preflights: [{
+					getCSS() {
+						if ((options.model ?? "v2") === "v2") return createFittedPreflight(options.baseHue, options.colors);
+						return `
+:root {
+  --chromatic-hue: ${options.baseHue};
+  --chromatic-bri: 1;
+  --chromatic-sat: 1;
+  ${VAR_CHROMA_SHADES.DEFAULT}: calc(0.18 + (cos(var(--chromatic-hue) * 3.14159265 / 180) * 0.04));
+  ${VAR_CHROMA_SHADES[50]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.3);
+  ${VAR_CHROMA_SHADES[100]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.5);
+  ${VAR_CHROMA_SHADES[200]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.6);
+  ${VAR_CHROMA_SHADES[300]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.75);
+  ${VAR_CHROMA_SHADES[400]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.85);
+  ${VAR_CHROMA_SHADES[500]}: var(${VAR_CHROMA_SHADES.DEFAULT});
+  ${VAR_CHROMA_SHADES[600]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 1.15);
+  ${VAR_CHROMA_SHADES[700]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 1.1);
+  ${VAR_CHROMA_SHADES[800]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.85);
+  ${VAR_CHROMA_SHADES[900]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.7);
+  ${VAR_CHROMA_SHADES[950]}: calc(var(${VAR_CHROMA_SHADES.DEFAULT}) * 0.5);
+}
+          `;
+					},
+					layer: "preflights"
+				}],
+				theme: { colors: Object.entries(options.colors).reduce((colors, [key, hueOffset]) => {
+					const bake = options.bakeColors || calledFromExtension;
+					if ((options.model ?? "v2") === "v2") colors[key] = bake ? createFittedBakedColorShades(options.baseHue, hueOffset) : createFittedVarBasedColorShades(key, hueOffset);
+					else colors[key] = bake ? createBakedColorShades(options.baseHue, hueOffset) : createVarBasedColorShades(hueOffset);
+					return colors;
+				}, {}) },
+				transformers: [createThemeFunctionAlphaTransformer(Object.keys(options.colors))],
+				variants: [variantChromaticAdjustments(options.modifierUtilityPrefixes, options.modifierVariantName)]
+			}
+		};
+	});
+}
+/**
+* Gives `theme('colors.<chromatic colour>…')` calls without an opacity an explicit `/ 1`, so they resolve to a valid
+* colour.
+*
+* NOTICE:
+* Our theme colours carry an alpha placeholder (`/ %alpha`), which opacity utilities like `bg-primary-500/50` need.
+* `transformThemeString` of `@unocss/rule-utils` (66.7.5, used by `@unocss/transformer-directives` for `theme()`)
+* only resolves that placeholder when the call has an opacity (`theme('colors.primary.400 / 50%')`); without one it
+* returns the raw string, leaving `%alpha` in the CSS, so browsers drop the declaration. `postprocess` cannot fix it,
+* because `theme()` is expanded in the CSS source by the directives transformer, not by the generator.
+* This transformer runs in the `pre` pass, before the directives transformer (default pass), and only rewrites calls
+* that name a colour of this preset and have no opacity; `1` is the value UnoCSS uses for an omitted opacity
+* elsewhere (`colorToString`).
+* Remove when `transformThemeString` resolves alpha placeholders without an explicit opacity itself.
+*/
+function createThemeFunctionAlphaTransformer(colorNames) {
+	const names = new Set(colorNames);
+	const themeColorRE = /theme\(\s*(['"])colors\.([\w-]+)(?:\.[\w-]+)?\1/g;
+	return {
+		codeFilter: (code) => code.includes("theme("),
+		enforce: "pre",
+		idFilter: (id) => cssIdRE.test(id),
+		name: "@lingbo/unocss-preset-chromatic:theme-alpha",
+		transform(code) {
+			for (const match of code.original.matchAll(themeColorRE)) {
+				if (!names.has(match[2])) continue;
+				code.appendLeft(match.index + match[0].length - 1, " /1");
+			}
+		}
+	};
+}
+function createVarBasedColorShades(hueOffset) {
+	return {
+		50: `color-mix(in srgb, oklch(${lightness(95)} ${chroma(`var(${VAR_CHROMA_SHADES[50]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha) 30%, oklch(100% 0 360 / %alpha))`,
+		100: `color-mix(in srgb, oklch(${lightness(95)} ${chroma(`var(${VAR_CHROMA_SHADES[100]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha) 80%, oklch(100% 0 360 / %alpha))`,
+		200: `oklch(${lightness(90)} ${chroma(`var(${VAR_CHROMA_SHADES[200]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		300: `oklch(${lightness(85)} ${chroma(`var(${VAR_CHROMA_SHADES[300]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		400: `oklch(${lightness(74)} ${chroma(`var(${VAR_CHROMA_SHADES[400]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		500: `oklch(${lightness(62)} ${chroma(`var(${VAR_CHROMA_SHADES[500]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		600: `oklch(${lightness(54)} ${chroma(`var(${VAR_CHROMA_SHADES[600]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		700: `oklch(${lightness(49)} ${chroma(`var(${VAR_CHROMA_SHADES[700]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		800: `oklch(${lightness(42)} ${chroma(`var(${VAR_CHROMA_SHADES[800]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		900: `oklch(${lightness(37)} ${chroma(`var(${VAR_CHROMA_SHADES[900]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		950: `oklch(${lightness(29)} ${chroma(`var(${VAR_CHROMA_SHADES[950]})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`,
+		DEFAULT: `oklch(${lightness(62)} ${chroma(`var(${VAR_CHROMA_SHADES.DEFAULT})`)} calc(var(${VAR_HUE}) + ${hueOffset}) / %alpha)`
+	};
+}
+function chroma(level) {
+	return `calc(${level} * var(${VAR_SATURATION}))`;
+}
+function createColorUtilityPrefixRE(prefixes) {
+	const sanitized = prefixes.map((prefix) => prefix.trim()).filter(Boolean).map(escapeRegExp);
+	if (!sanitized.length) return /^$/;
+	return new RegExp(`^(?:${sanitized.join("|")})-`);
+}
+function escapeRegExp(raw) {
+	return raw.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+/**
+* `<prefix>-f<k>` for each shared curve and `<prefix>-<shade>` combining them, mirroring `evaluateFittedBlock`.
+*/
+function fittedBlockDeclarations(prefix, block, basis, wrap) {
+	if (isPerShadeBlock(block)) return SHADES.map((shade, s) => `${prefix}-${shade}: ${wrap(`calc(${fourierCSS(block.curves[s], basis, true)})`)};`);
+	const lines = block.curves.map((curve, k) => `${prefix}-f${k + 1}: calc(${fourierCSS(curve, basis, block.curvesHaveConst)});`);
+	SHADES.forEach((shade, s) => {
+		const terms = block.curves.map((_, k) => block.weights[s][k]).map((weight, k) => weight === 0 ? "" : `${weight} * var(${prefix}-f${k + 1})`).filter(Boolean);
+		if (block.intercepts[s] !== 0 || !terms.length) terms.unshift(`${block.intercepts[s]}`);
+		lines.push(`${prefix}-${shade}: ${wrap(`calc(${terms.join(" + ")})`)};`);
+	});
+	return lines;
+}
+/** `--chromatic-fit-<name>-<quantity>`, with characters that are not valid in a custom property name replaced. */
+function fittedVar(name, quantity) {
+	return `--chromatic-fit-${name.replaceAll(/[^\w-]/g, "-")}-${quantity}`;
+}
+/** CSS for `[const?] + a1·cos(θ) + b1·sin(θ) + a2·cos(2θ) + …` with θ given as a radian expression. */
+function fourierCSS(coeffs, basis, withConst) {
+	const terms = [];
+	let i = 0;
+	if (withConst) terms.push(`${coeffs[i++]}`);
+	for (let k = 1; i < coeffs.length; k++) {
+		const a = coeffs[i++];
+		const b = coeffs[i++];
+		if (a !== 0) terms.push(`${a} * var(${basis}-cos${k})`);
+		if (b !== 0) terms.push(`${b} * var(${basis}-sin${k})`);
+	}
+	return terms.length ? terms.join(" + ") : "0";
+}
+/** Number of harmonics in a Fourier coefficient list `[const?, a1, b1, a2, b2, …]`. */
+function harmonicsOf(coeffs, withConst) {
+	return (coeffs.length - (withConst ? 1 : 0)) / 2;
+}
+function isPerShadeBlock(block) {
+	return block.curvesHaveConst && block.curves.length === SHADES.length && block.intercepts.every((v) => v === 0) && block.weights.every((row, s) => row.every((w, k) => w === (k === s ? 1 : 0)));
+}
+function lightness(level) {
+	return `clamp(0%, calc(${level}% * var(${VAR_BRIGHTNESS})), 100%)`;
+}
+/**
+* Replaces alpha placeholders that the base preset left in a utility with `1`.
+*
+* NOTICE:
+* presetWind4 inlines a theme color that contains `var(` (every shade of the runtime palette contains
+* `var(--chromatic-hue)`) into the utility as `color-mix(<method>, <color> <opacity>, transparent)` without touching
+* its `%alpha` placeholder (`colorCSSGenerator` in `@unocss/preset-wind4/dist/utils-*.mjs`, 66.7.5 lines 569-586).
+* It only replaces placeholders with `1` when it emits theme variables (`getThemeVarsMap` in
+* `@unocss/preset-wind4/dist/index.mjs`, line 456), which it skips for such colors. The leftover `%alpha` makes the
+* declaration invalid, so browsers drop it.
+* Replacing the placeholder with `1` gives the value wind4 itself would use; the surrounding `color-mix(…, transparent)`
+* still applies the utility's opacity. presetWind3 resolves every placeholder before postprocessing (it puts the
+* opacity into the color), so this never changes wind3 output.
+* Remove when presetWind4 resolves placeholders of inlined `var(` colors itself.
+*/
+function resolveLeftoverAlphaPlaceholders(util) {
+	for (const entry of util.entries) if (typeof entry[1] === "string") entry[1] = entry[1].replaceAll(alphaPlaceholdersRE, "1");
+}
+function round(value, digits) {
+	return Number(value.toFixed(digits));
+}
+function toRatio(raw) {
+	const parsed = Number.parseFloat(raw);
+	return `${Number(((Number.isFinite(parsed) ? Math.min(200, Math.max(0, parsed)) : 100) / 100).toFixed(4))}`;
+}
+function variantChromaticAdjustments(utilityPrefixes = DEFAULT_MODIFIER_UTILITY_PREFIXES, name = "chromatic-modifiers") {
+	const colorUtilityPrefixRE = createColorUtilityPrefixRE(utilityPrefixes);
+	return {
+		match(matcher) {
+			if (!colorUtilityPrefixRE.test(matcher)) return;
+			let base = matcher;
+			let brightness;
+			let saturation;
+			const starIndex = base.lastIndexOf("*");
+			if (starIndex >= 0) {
+				const briCandidate = base.slice(starIndex + 1);
+				if (!percentRE.test(briCandidate)) return;
+				brightness = briCandidate;
+				base = base.slice(0, starIndex);
+			}
+			const tildeIndex = base.lastIndexOf("~");
+			if (tildeIndex >= 0) {
+				const satCandidate = base.slice(tildeIndex + 1);
+				if (!percentRE.test(satCandidate)) return;
+				saturation = satCandidate;
+				base = base.slice(0, tildeIndex);
+			}
+			if (!base || !brightness && !saturation) return;
+			return {
+				body: (body) => {
+					if (!body.length) return body;
+					const brightnessRatio = brightness && toRatio(brightness);
+					const saturationRatio = saturation && toRatio(saturation);
+					return body.map(([property, value]) => {
+						if (typeof value !== "string") return [property, value];
+						return [property, value.replaceAll(`var(${VAR_BRIGHTNESS})`, brightnessRatio || `var(--chromatic-bri)`).replaceAll(`var(${VAR_SATURATION})`, saturationRatio || `var(--chromatic-sat)`)];
+					});
+				},
+				matcher: base
+			};
+		},
+		name
+	};
+}
+function wrapHue(hue) {
+	return (hue % 360 + 360) % 360;
+}
+//#endregion
+export { createPresetChromatic as n, VAR_HUE as t };

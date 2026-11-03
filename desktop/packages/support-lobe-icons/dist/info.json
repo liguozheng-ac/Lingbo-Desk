@@ -1,0 +1,29 @@
+{
+  "prefix": "lobe-icons",
+  "name": "Lobe Icons",
+  "total": 837,
+  "version": "1.0.19",
+  "author": {
+    "name": "LobeHub",
+    "url": "https://github.com/lobehub"
+  },
+  "license": {
+    "title": "MIT",
+    "spdx": "MIT"
+  },
+  "samples": [
+    "openai",
+    "deepseek",
+    "claude"
+  ],
+  "height": 20,
+  "displayHeight": 20,
+  "category": "Logos 20px",
+  "tags": [
+    "AI",
+    "Models",
+    "LLM",
+    "Lobe"
+  ],
+  "palette": false
+}

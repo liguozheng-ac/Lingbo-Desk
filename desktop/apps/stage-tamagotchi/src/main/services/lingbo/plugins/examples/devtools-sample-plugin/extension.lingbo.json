@@ -1,0 +1,47 @@
+{
+  "manifestVersion": 2,
+  "kind": "manifest.extension.lingbo.local",
+  "id": "devtools-sample-plugin",
+  "version": "1.0.0",
+  "engines": {
+    "lingbo": "*",
+    "runtimes": [
+      "electron"
+    ]
+  },
+  "entrypoints": {
+    "electron": "./devtools-sample-plugin.mjs"
+  },
+  "permissions": {
+    "apis": [
+      {
+        "key": "proj-lingbo:plugin-sdk:apis:protocol:capabilities:wait",
+        "actions": [
+          "invoke"
+        ]
+      },
+      {
+        "key": "proj-lingbo:plugin-sdk:apis:protocol:resources:providers:list-providers",
+        "actions": [
+          "invoke"
+        ]
+      }
+    ],
+    "resources": [
+      {
+        "key": "proj-lingbo:plugin-sdk:apis:protocol:resources:providers:list-providers",
+        "actions": [
+          "read"
+        ]
+      }
+    ],
+    "capabilities": [
+      {
+        "key": "proj-lingbo:plugin-sdk:apis:protocol:resources:providers:list-providers",
+        "actions": [
+          "wait"
+        ]
+      }
+    ]
+  }
+}

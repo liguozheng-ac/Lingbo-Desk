@@ -1,0 +1,27 @@
+{
+  "name": "@lingbo/agents",
+  "type": "module",
+  "version": "0.14.1",
+  "private": true,
+  "description": "Single-purpose model agents that LINGBO runtimes and evals share",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tool-card": "./src/tool-card/index.ts",
+    "./voice-end-judge": "./src/voice-end-judge/index.ts",
+    "./voice-transcription-rephrase": "./src/voice-transcription-rephrase/index.ts"
+  },
+  "scripts": {
+    "test:run": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/core-agent": "workspace:*",
+    "@lingbo/provider-inference": "workspace:*",
+    "valibot": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "vitest": "catalog:vitest"
+  }
+}

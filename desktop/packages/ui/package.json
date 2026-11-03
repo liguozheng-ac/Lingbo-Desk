@@ -1,0 +1,30 @@
+{
+  "name": "@lingbo/ui",
+  "type": "module",
+  "version": "0.14.1",
+  "description": "A collection of UI components that used by Lingbo Desk",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./main.css": "./src/main.css",
+    "./components/animations": "./src/components/animations/index.ts",
+    "./components/form": "./src/components/form/index.ts",
+    "./components/layouts": "./src/components/layouts/index.ts",
+    "./*": "./*"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@moeru/std": "catalog:",
+    "@vueuse/core": "catalog:",
+    "floating-vue": "catalog:",
+    "reka-ui": "catalog:",
+    "vaul-vue": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@vue-macros/volar": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

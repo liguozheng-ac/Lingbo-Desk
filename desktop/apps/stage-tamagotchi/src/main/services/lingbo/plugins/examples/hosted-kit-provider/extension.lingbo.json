@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 2,
+  "kind": "manifest.extension.lingbo.local",
+  "id": "hosted-kit-provider",
+  "version": "1.0.0",
+  "engines": {
+    "lingbo": "*",
+    "runtimes": ["electron"]
+  },
+  "entrypoints": {
+    "electron": "./hosted-kit-provider.mjs"
+  },
+  "permissions": {},
+  "kits": {
+    "provides": [{
+      "id": "dev.lingbo.example-hosted",
+      "version": "1.0.0",
+      "exposure": "local-only"
+    }]
+  }
+}

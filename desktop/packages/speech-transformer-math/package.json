@@ -1,0 +1,29 @@
+{
+  "name": "@lingbo/speech-transformer-math",
+  "type": "module",
+  "version": "0.14.1",
+  "private": true,
+  "description": "Reads TeX formulas as words in Chinese, English, Japanese, and Korean, through MathJSON",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/mathjson": "workspace:*",
+    "katex": "catalog:"
+  }
+}

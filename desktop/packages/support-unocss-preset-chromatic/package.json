@@ -1,0 +1,21 @@
+{
+  "name": "@lingbo/unocss-preset-chromatic",
+  "type": "module",
+  "version": "2.0.1",
+  "description": "Readability enhanced, clean, nice looking colors palette we used across our Project LINGBO https://github.com/moeru-ai/lingbo projects!",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "node": "./dist/index.node.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "dependencies": {
+    "@lingbo/chromatic": "workspace:*"
+  }
+}

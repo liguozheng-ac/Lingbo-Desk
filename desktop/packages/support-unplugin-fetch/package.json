@@ -1,0 +1,31 @@
+{
+  "name": "@lingbo/unplugin-fetch",
+  "type": "module",
+  "version": "0.2.3",
+  "description": "Vite plugin to download files",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/vite/index.d.mts",
+      "default": "./dist/vite/index.mjs"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.mts",
+      "default": "./dist/vite/index.mjs"
+    }
+  },
+  "main": "./dist/vite/index.mjs",
+  "module": "./dist/vite/index.mjs",
+  "types": "./dist/vite/index.d.mts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "peerDependencies": {
+    "vite": ">= 7"
+  },
+  "dependencies": {
+    "ofetch": "^1.5.1"
+  }
+}

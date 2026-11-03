@@ -1,0 +1,47 @@
+# Credentials, personal data and machine configuration
+.env
+.env.*
+!.env.example
+**/.local/
+**/runs/
+**/*.dpapi
+**/*.pem
+**/*.pfx
+**/*.key
+**/*.sqlite*
+**/*.db
+
+# Installed dependencies, local runtime, generated assets and build output
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+**/.cache/
+**/.turbo/
+**/.eslintcache
+**/out/
+**/coverage/
+**/dist/
+!desktop/packages/support-*/dist/
+!desktop/packages/support-*/dist/**
+.venv/
+artifacts/
+releases/
+resources/local/
+desktop/apps/stage-tamagotchi/public/assets/js/
+desktop/apps/stage-tamagotchi/src/renderer/public/assets/js/
+desktop/packages/stage-ui/src/assets/live2d/models/
+desktop/packages/stage-ui/src/assets/vrm/models/
+
+# Generated bridge and launcher copies
+desktop/apps/stage-tamagotchi/src/renderer/bridges/lingbo-*.mjs
+desktop/apps/stage-tamagotchi/computer-use-runtime-patch.mjs
+desktop/apps/stage-tamagotchi/electron-integration.config.ts
+desktop/apps/stage-tamagotchi/package-bootstrap.mjs
+desktop/apps/stage-tamagotchi/static-renderer.mjs
+desktop/apps/stage-tamagotchi/profile-migration.mjs
+
+# Local editor state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

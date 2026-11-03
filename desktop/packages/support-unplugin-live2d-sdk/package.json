@@ -1,0 +1,32 @@
+{
+  "name": "@lingbo/unplugin-live2d-sdk",
+  "type": "module",
+  "version": "0.1.7",
+  "description": "Vite plugin to download Live2D SDK",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.mjs",
+      "require": "./dist/vite/index.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.mjs",
+      "node": "./dist/vite/index.cjs"
+    }
+  },
+  "main": "./dist/vite/index.cjs",
+  "module": "./dist/vite/index.mjs",
+  "types": "./dist/vite/index.d.ts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "dependencies": {
+    "ofetch": "^1.5.1",
+    "vite": "^8.0.8",
+    "yauzl": "^3.3.0"
+  }
+}

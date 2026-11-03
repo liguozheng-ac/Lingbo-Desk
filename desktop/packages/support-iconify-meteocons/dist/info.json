@@ -1,0 +1,27 @@
+{
+  "prefix": "meteocons",
+  "name": "Meteocons",
+  "total": 945,
+  "version": "0.1.5",
+  "author": {
+    "name": "Project LINGBO Team",
+    "url": "https://github.com/proj-lingbo"
+  },
+  "license": {
+    "title": "MIT",
+    "spdx": "MIT"
+  },
+  "samples": [
+    "partly-cloudy-day-rain-fill",
+    "wind-beaufort-4-line",
+    "thunderstorms-night-fill-static"
+  ],
+  "height": 20,
+  "displayHeight": 20,
+  "category": "Logos 20px",
+  "tags": [
+    "Weather",
+    "Animated"
+  ],
+  "palette": false
+}

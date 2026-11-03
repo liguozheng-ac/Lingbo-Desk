@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>聆泊 · 工作台</title>
+<style>
+body{max-width:960px;margin:32px auto;padding:0 24px;background:#f5f8fc;color:#203047;font:16px/1.7 system-ui,"Microsoft YaHei",sans-serif}h1{font-size:28px;margin-bottom:8px}h2{font-size:20px;margin:0 0 12px}section{padding:24px;margin:18px 0;background:white;border:1px solid #dce4ef;border-radius:16px}button,input,select,textarea{font:inherit;padding:9px 13px;border:1px solid #c9d5e3;border-radius:8px;max-width:100%;box-sizing:border-box}button{cursor:pointer;background:#edf4ff;margin:4px}button:disabled{opacity:.5;cursor:default}textarea{display:block;width:100%;min-height:90px}input[type=text]{width:75%}input[type=file]{width:100%}pre{white-space:pre-wrap;word-break:break-word;font-size:14px}small,.muted{color:#65748a}.status{color:#096b55;white-space:pre-wrap}a{color:#2262ae}.primary{background:#245ac4;color:white;border-color:#245ac4}#events{max-height:180px;overflow:auto}#artifact,#source-state{max-height:330px;overflow:auto}.steps{padding-left:24px}.steps li{margin:5px 0}
+</style>
+<style>#audit-detail,#source-text{max-height:340px;overflow:auto}#citation-links{max-height:200px;overflow:auto}</style>
+<style>#work-roots,#work-skills{display:block;width:100%;min-height:90px;margin:6px 0 14px}#work-approval{max-height:440px;overflow:auto}#work-select{width:100%}</style>
+<h1>聆泊 · 工作台</h1>
+<p>这个网页用于管理任务和设置。<strong>语音聊天在桌面Hiyori窗口中。</strong> <a href="http://127.0.0.1:3850/">打开本机任务台</a></p>
+<noscript>页面需要 JavaScript。请使用正常启用脚本的浏览器打开本机任务台。</noscript>
+<section><h2>开始语音聊天</h2>
+<ol class="steps"><li>双击桌面或开始菜单里的 <strong>聆泊</strong>，找到角色窗口。</li><li>鼠标移到角色窗口内，点击 <strong>麦克风图标</strong> 开启输入；带斜杠表示关闭。</li><li>保持 <strong>喇叭图标</strong> 取消静音，回复会从当前扬声器或耳机播放。点击聊天气泡查看文字。</li></ol>
+<p id="desktop-state" class="muted">正在检查Hiyori窗口…</p>
+<div id="samples"><button data-lang="zh">试听中文声音</button><button data-lang="ja">试听日语声音</button><button data-lang="en">试听英语声音</button><button id="stop-preview">停止试听</button></div><small>试听只播放声音，不开启麦克风。每次合成会使用正常 API 用量。</small><p id="sample-state" aria-live="polite"></p>
+</section>
+<section><h2>连接与识别设置</h2><p id="status" class="status" role="status">连接中…</p><button id="retry">重新检查连接</button><label>语音识别语种 <select id="language"><option value="auto">自动识别</option><option value="zh">中文</option><option value="ja">日本語</option><option value="en">English</option></select></label><small id="language-state">默认自动识别，无需切换中、日、英；识别不准时可手动选择。选择后自动保存。</small></section>
+<section><h2>模型选择</h2><p id="model-current">正在读取模型配置…</p>
+<select id="model-choice" aria-label="选择模型"></select><button id="model-probe">检查连接</button><button id="model-select">验证并切换</button><p id="model-state" role="status"></p>
+<small>聊天与后台报告共用此选择。请先结束后台任务再切换；进行中的工具链保留原模型。连接失败不会自动改用云端。语音识别与合成仍使用当前云端服务，本地模型模式不等于完全离线。</small></section>
+<section><h2>长期记忆</h2><p id="memory-count"></p>
+<label>选择记忆 <select id="memory-select"><option value="">新增记忆</option></select></label>
+<label>标题 <input id="memory-title" maxlength="80" placeholder="例如：回复偏好"></label><label>内容 <textarea id="memory-text" maxlength="600" placeholder="例如：默认用中文简短回答，指出不确定性。"></textarea></label>
+<button id="memory-save">保存记忆</button><button id="memory-delete">删除选中记忆</button><p id="memory-state" role="status"></p>
+<small>也可在聊天中明确说“记住：内容”。记忆保存在本机；使用云端模型时，会随请求发送给该服务。删除影响之后的新请求，历史聊天与已有任务快照仍保留。凭据继续使用本机加密配置。</small></section>
+<section><h2>Skills</h2><button id="personal-refresh">刷新记忆与技能</button>
+<label>选择技能 <select id="skill-select"><option value="">新增技能</option></select></label><label>技能编号 <input id="skill-id" maxlength="60" placeholder="如 concise-report，仅小写字母、数字和连字符"></label>
+<label>读取 SKILL.md <input id="skill-file" type="file" accept=".md,text/markdown,text/plain"></label>
+<label>读取完整技能文件夹（文字资源）<input id="skill-bundle" type="file" webkitdirectory multiple></label>
+<label>技能内容 <textarea id="skill-text" rows="8" placeholder="---&#10;name: 简洁报告&#10;description: 简洁、有来源的报告&#10;scope: report&#10;---&#10;先给结论，再列依据和待核实事项。"></textarea></label>
+<button id="skill-import">保存／更新</button><button id="skill-enable">启用</button><button id="skill-disable">禁用</button><p id="skill-state" role="status"></p>
+<small>SKILL.md 最多 16 KB；scope 可为 chat、report、work、both，省略时默认 both。每次最多选 3 个。支持 scripts、references、assets 下最多 20 个文字资源，每个 64 KB。脚本每次运行须审阅确认；更新后技能自动禁用。聊天使用“使用技能：编号 你的要求”；工作技能在“后台工作”选择，或明确告诉 Hiyori 技能编号。</small>
+<label>新报告使用的技能（可多选）<select id="report-skills" multiple size="3"></select></label></section>
+<section><h2>整理自己的资料</h2>
+<p>选择文件夹后会列出支持的资料。读取资料只创建本机快照；点击“生成 Word 报告”后，由当前选择的模型整理。选用云端模型时，正文会发送给该服务。原资料不会被修改。</p>
+<label>选择资料文件夹 <input id="folder" type="file" webkitdirectory multiple></label>
+<p><small>支持 Markdown、TXT、DOCX、文字型 PDF；最多 20 份、合计 20 MB，提取正文合计最多 60000 字符。扫描 PDF 暂不支持；图片、批注和复杂排版不参与整理。</small></p>
+<button id="import" disabled>读取选中的资料</button><button id="create-document" class="primary" disabled>生成 Word 报告</button><pre id="source-state" aria-live="polite">尚未选择资料。</pre>
+<label for="requirements">报告要求（可选，最多 2000 字）</label><textarea id="requirements" maxlength="2000" placeholder="例如：重点比较成本与实施风险，保留资料来源，列出待核实事项。"></textarea>
+<small>任务安全暂停后，可修改这里的要求，再点击下方“保存新要求”，影响尚未开始的报告阶段。</small>
+</section>
+<section><h2>整理公开网页</h2>
+<p>粘贴指定网页链接，后台读取正文并由当前模型生成带来源的 Word 报告。选用云端模型时，网页正文会发送给该服务；原始链接、读取时间及正文快照保存在本机。</p>
+<form id="web-report"><label for="web-urls">网页链接（每行一个，最多 5 个）</label><textarea id="web-urls" rows="4" maxlength="11000" placeholder="https://example.com/article" required></textarea>
+<label for="web-requirements">网页报告要求（可选，最多 2000 字）</label><textarea id="web-requirements" maxlength="2000" placeholder="例如：比较各网页的主要观点，保留引用，列出分歧和待核实事项。"></textarea>
+<button id="create-web" class="primary" type="submit">读取网页并生成 Word</button></form>
+<p id="web-state" role="status">任务提交后，在下方“报告任务”查询、暂停、修改要求或取消。</p>
+<small>首版只读指定链接，不自动搜索或跟随正文链接，不登录、不点击。仅支持公开 HTML 和纯文本页面；需要登录、验证或 JavaScript 的页面暂不支持，正文可能不完整，请复核快照。单页最多 2 MB、30000 字符，全部资料及编号合计最多 60000 字符。暂停会等待当前页面读取结束或超时。</small>
+</section>
+<section><h2>后台工作</h2>
+<p>文件、Word、Excel、PowerPoint 和独立浏览器使用同一套任务控制。可在这里输入完整要求，也可以直接对 Hiyori 说。新文件默认放在每个任务的产物文件夹；使用原有资料前请先授权具体文件夹。</p>
+<label>资料文件夹绝对路径 <input id="work-directory" type="text" placeholder="D:\我的资料\项目A"></label><select id="work-mode"><option value="read">只读</option><option value="write">读写</option></select><button id="work-grant">添加授权</button><div id="work-permissions"></div>
+<label>本次任务可用文件夹（多选；不选仅使用产物目录）<select id="work-roots" multiple size="3"></select></label>
+<label>本次使用的技能（最多 3 个）<select id="work-skills" multiple size="3"></select></label>
+<textarea id="work-request" maxlength="8000" placeholder="例如：读取 D:\我的资料\项目A 的两份文档，整理成总结.docx 和对比表.xlsx，保留出处。修改任务时，在暂停后填写新的完整要求。"></textarea><button id="work-submit" class="primary">提交后台工作</button>
+<p id="work-message" role="status"></p><label>选择工作任务 <select id="work-select"></select></label>
+<div><button id="work-progress">刷新进度</button><button id="work-pause">暂停</button><button id="work-modify">保存完整新要求</button><button id="work-resume">继续</button><button id="work-cancel">取消</button></div>
+<label><input type="checkbox" id="work-reviewed">恢复前已核对发生变化的文件或中断动作，接受从当前状态继续</label><pre id="work-state"></pre><div id="work-downloads"></div>
+<h3>待确认操作</h3><p>请核对目标、内容及风险。一次确认仅授权下面这一项动作；暂停、修改、取消后旧确认失效。脚本具有当前用户完整系统权限，不能当作沙箱使用。</p><pre id="work-approval"></pre><button id="work-approve" disabled>批准这一项动作</button><button id="work-reject" disabled>拒绝这一项动作</button>
+<details><summary>实际工具执行记录</summary><pre id="work-receipts"></pre></details>
+<small>修改原件前自动备份；删除仅将单个文件移入备份区。暂停和取消不会撤销已经完成的操作。Office 工具支持 DOCX、XLSX、PPTX；复杂 Excel 扩展、旧格式、宏及任意 WPS 界面操作不承诺保真或成功。独立浏览器需要本机 Edge；登录、验证码和付款由你处理。</small>
+</section>
+<section><h2>报告任务</h2><label>选择任务 <select id="task-select"><option value="">暂无任务</option></select></label>
+<div id="controls"><button data-action="create" disabled>生成测试报告</button><button data-action="progress" disabled>查询进度</button><button data-action="pause" disabled>暂停</button><button data-action="modify_requirements" disabled>保存新要求</button><button data-action="modify" disabled>增加日语摘要</button><button data-action="resume" disabled>继续</button><button data-action="cancel" disabled>取消</button><button data-action="stop_speech" disabled>停止角色播报</button></div>
+<p id="task-reply" aria-live="polite"></p><pre id="task-state">还没有任务</pre><button id="read-report">查看完成的报告</button><button id="download-word" disabled>下载 Word 报告</button><pre id="artifact"></pre>
+<small>任务记录与产物在重启后保留。中断任务需手动继续，通过资料和阶段检查后才会执行。旧版任务缺少检查点时只能另建任务。取消不会撤销已写入的产物。</small></section>
+<section><h2>报告来源与复核</h2><p id="audit-state">选择资料报告后可检查来源。</p><button id="audit-report" disabled>检查报告来源</button><small>编号能追溯不代表结论已核实；数字换算和外部事实仍需复核。</small><pre id="audit-detail"></pre><div id="citation-links"></div><label>资料 <select id="source-reference"></select></label><button id="view-source" disabled>查看资料原文</button><button id="download-source" disabled>下载来源快照</button><p id="source-origin"></p><pre id="source-text"></pre></section>
+<section><h2>文字指令</h2><p><small>例如：生成测试报告、报告任务进度、暂停报告任务。其它文字交给当前选择的模型。此处不接收麦克风输入。</small></p><form id="chat"><input id="message" type="text" placeholder="输入一句话" required><button>发送</button></form><pre id="chat-reply"></pre></section>
+<section><h2>语音耗时</h2><p>查看本次服务启动后的识别、模型、合成与播放器记录。仅记录时间、编号与计数，不保存语音内容或对话正文。</p><button id="voice-metrics">刷新语音耗时</button><pre id="voice-metrics-state">等待查询。录音、断句和声卡延迟不包含在这些接口耗时内。</pre></section>
+<section><h2>任务事件</h2><small id="event-state">等待连接</small><pre id="events"></pre></section>
+<script defer src="./entry.js"></script></html>

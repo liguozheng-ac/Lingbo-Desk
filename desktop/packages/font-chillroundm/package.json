@@ -1,0 +1,32 @@
+{
+  "name": "@lingbo/font-chillroundm",
+  "type": "module",
+  "version": "0.14.1",
+  "description": "Essential CSS for font, ChillRoundM (a.k.a. 寒蝉半圆体), used by Lingbo Desk",
+  "license": "SIL Open Font License",
+  "exports": {
+    ".": {
+      "default": "./dist/index.css"
+    },
+    "./index.css": {
+      "default": "./dist/index.css"
+    },
+    "./files/*": {
+      "default": "./dist/files/*"
+    },
+    "./files/*.ttf": {
+      "default": "./dist/files/*.ttf"
+    },
+    "./files/*.otf": {
+      "default": "./dist/files/*.otf"
+    },
+    "./*": {
+      "default": "./*.css"
+    }
+  },
+  "main": "./dist/index.css",
+  "scripts": {
+    "dev": "pnpm run build",
+    "build": "tsdown"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@lingbo/iconify-meteocons",
+  "type": "module",
+  "version": "0.1.5",
+  "description": "Iconify JSON IconSet port for Meteocons",
+  "license": "MIT",
+  "exports": {
+    "./*": "./*",
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.mjs"
+    },
+    "./icons.json": "./dist/icons.json",
+    "./info.json": "./dist/info.json",
+    "./metadata.json": "./dist/metadata.json"
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "dependencies": {
+    "@iconify/types": "^2.0.0"
+  }
+}

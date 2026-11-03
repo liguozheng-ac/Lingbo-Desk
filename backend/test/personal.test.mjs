@@ -1,0 +1,62 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { PersonalStore, memoryCommand } from '../personal-store.mjs';
+import { PersonalSkills } from '../personal-skills.mjs';
+import { ModelRouter } from '../model-router.mjs';
+
+function fixture(t) { const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lingbo-personal-')); t.after(() => fs.rmSync(directory, { recursive: true, force: true })); return directory; }
+test('explicit memories survive reload, reject stale edits and remove future context without changing history', t => {
+  const directory = fixture(t), store = new PersonalStore(directory);
+  assert.equal(memoryCommand('我可能喜欢绿色', store), null);
+  assert.equal(memoryCommand('记住了吗？', store), null);
+  memoryCommand('记住：测试偏好为绿色', store);
+  const item = new PersonalStore(directory).snapshot().memories[0];
+  assert.match(store.context(), /绿色/);
+  assert.throws(() => store.memory({ action: 'update', id: item.id, title: '偏好', text: '蓝色', revision: 0 }), /更新/);
+  const before = fs.readFileSync(store.file, 'utf8');
+  assert.throws(() => store.memory({ action: 'add', title: '凭据', text: 'sk-' + 'a'.repeat(32) }), /密钥/);
+  assert.equal(fs.readFileSync(store.file, 'utf8'), before);
+  store.memory({ action: 'update', id: item.id, title: '偏好', text: '蓝色', revision: 1 });
+  assert.doesNotMatch(store.context(), /绿色/);
+  store.memory({ action: 'delete', id: item.id, revision: 2 });
+  assert.equal(new PersonalStore(directory).context(), '');
+  fs.writeFileSync(store.file, '{broken'); assert.throws(() => new PersonalStore(directory));
+  assert.equal(fs.readFileSync(store.file, 'utf8'), '{broken');
+});
+const skill = body => `---\nname: 测试技能\ndescription: 仅用于测试\nscope: report\n---\n${body}`;
+test('skill updates and manual file edits revoke activation; instructions cannot load scripts or escape directory', t => {
+  const directory = fixture(t), store = new PersonalStore(directory), skills = new PersonalSkills(path.join(directory, 'skills'), store);
+  assert.throws(() => skills.install({ id: '../escape', raw: skill('test') }));
+  skills.install({ id: 'test-report', raw: skill('先列事实。') });
+  assert.throws(() => skills.context(['test-report'], 'report'), /未启用/);
+  let item = skills.list()[0]; skills.toggle({ id: item.id, enabled: true, sha256: item.sha256 });
+  assert.match(skills.context([item.id], 'report').text, /先列事实/);
+  assert.throws(() => skills.context([item.id], 'chat'), /不适用/);
+  skills.install({ id: item.id, raw: skill('再列缺口。') });
+  assert.equal(skills.list()[0].enabled, false);
+  assert.throws(() => skills.toggle({ id: item.id, enabled: true, sha256: item.sha256 }), /变化/);
+  item = skills.list()[0]; skills.toggle({ id: item.id, enabled: true, sha256: item.sha256 });
+  fs.writeFileSync(path.join(directory, 'skills', item.id, 'SKILL.md'), skill('磁盘更新。'));
+  assert.throws(() => skills.context([item.id], 'report'), /已更新/);
+  assert.equal(new PersonalSkills(path.join(directory, 'skills'), new PersonalStore(directory)).list()[0].changed, true);
+});
+test('model route pins a tool chain, isolates local credentials and never retries local failures on cloud', async t => {
+  const store = new PersonalStore(fixture(t)); const calls = [];
+  const router = new ModelRouter(store, 'cloud-secret-for-test', async (url, options) => { calls.push({ url, options }); return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] })); });
+  assert.equal(router.forTurn('s', 'turn').id, 'deepseek');
+  store.commit(next => { next.model = 'ollama'; });
+  assert.equal(router.forTurn('s', 'turn').id, 'deepseek');
+  assert.equal(router.forTurn('s', 'next').id, 'ollama');
+  await router.probe('ollama');
+  assert.equal(calls.length, 1); assert.match(calls[0].url, /^http:\/\/127\.0\.0\.1:11434\//);
+  assert.doesNotMatch(JSON.stringify(calls), /cloud-secret-for-test/);
+  assert.equal(JSON.parse(calls[0].options.body).reasoning_effort, 'none');
+  const budget = router.body({ max_completion_tokens: 1600, messages: [] }, router.choice('ollama'));
+  assert.equal(budget.max_tokens, 1600); assert.equal(budget.max_completion_tokens, undefined);
+  const failing = new ModelRouter(store, 'cloud-secret-for-test', async url => { calls.push({ url }); throw new TypeError('offline'); });
+  await assert.rejects(failing.probe('ollama'), /没有自动切换/);
+  assert.equal(calls.length, 2); assert.match(calls[1].url, /127\.0\.0\.1/);
+});

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.moeru.lingbo</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>LINGBO</name>
+  <summary>AI VTuber/Waifu chatbot inspired by Neuro-sama</summary>
+  <description>
+    <p>
+      LINGBO is an AI VTuber/Waifu chatbot supporting Live2D/VRM avatars, featuring human-like interactions and modular stage-based rendering.
+    </p>
+  </description>
+  <launchable type="desktop-id">ai.moeru.lingbo.desktop</launchable>
+  <url type="homepage">http://127.0.0.1:3850/</url>
+  <url type="bugtracker">http://127.0.0.1:3850/</url>
+  <developer_name>Moeru AI Community</developer_name>
+  <content_rating type="oars-1.1" />
+</component>

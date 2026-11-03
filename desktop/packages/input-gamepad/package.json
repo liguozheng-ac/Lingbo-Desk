@@ -1,0 +1,27 @@
+{
+  "name": "@lingbo/input-gamepad",
+  "type": "module",
+  "version": "0.14.1",
+  "private": true,
+  "description": "Standard Gamepad API input for LINGBO",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "test:run": "vitest run --config vitest.config.ts",
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  }
+}

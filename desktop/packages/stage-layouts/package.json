@@ -1,0 +1,62 @@
+{
+  "name": "@lingbo/stage-layouts",
+  "type": "module",
+  "private": true,
+  "description": "Shared Layouts",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser/adaptive-input": "./src/browser/adaptive-input.ts",
+    "./layouts/*": "./src/layouts/*.vue",
+    "./components/AdaptiveInput": "./src/components/AdaptiveInput/index.ts",
+    "./components/Layouts/*": "./src/components/Layouts/*.vue",
+    "./components/Layouts/InteractiveArea/Actions/*": "./src/components/Layouts/InteractiveArea/Actions/*.vue",
+    "./components/Layouts/ViewControls/*": "./src/components/Layouts/ViewControls/*.vue",
+    "./components/Widgets/*": "./src/components/Widgets/*.vue",
+    "./components/Backgrounds/*": "./src/components/Backgrounds/*",
+    "./composables/*": "./src/composables/*.ts",
+    "./stores/*": "./src/stores/*.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/ccc": "workspace:*",
+    "@lingbo/i18n": "workspace:*",
+    "@lingbo/server-sdk": "workspace:*",
+    "@lingbo/stage-ui": "workspace:*",
+    "@lingbo/stage-ui-three": "workspace:*",
+    "@lingbo/ui": "workspace:*",
+    "@moeru/eventa": "catalog:",
+    "@moeru/std": "catalog:",
+    "@vueuse/core": "catalog:",
+    "@vueuse/shared": "catalog:",
+    "@xsai-ext/providers": "catalog:",
+    "@xsai/generate-speech": "catalog:",
+    "@xsai/stream-transcription": "catalog:",
+    "animejs": "catalog:",
+    "colorjs.io": "catalog:",
+    "dompurify": "catalog:",
+    "localforage": "catalog:",
+    "nanoid": "catalog:",
+    "node-vibrant": "catalog:",
+    "pinia": "catalog:",
+    "reka-ui": "catalog:",
+    "unspeech": "catalog:xsai",
+    "vue": "catalog:",
+    "vue-i18n": "catalog:",
+    "vue-router": "catalog:",
+    "vue-sonner": "catalog:"
+  },
+  "devDependencies": {
+    "@lingbo/stage-shared": "workspace:*",
+    "@nekopaw/tempora": "catalog:",
+    "@types/audioworklet": "catalog:",
+    "@types/three": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "jsdom": "catalog:",
+    "unplugin-info": "catalog:",
+    "vitest": "catalog:vitest",
+    "vue-tsc": "catalog:"
+  }
+}

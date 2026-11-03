@@ -1,0 +1,29 @@
+{
+  "name": "@lingbo/lobe-icons",
+  "type": "module",
+  "version": "1.0.19",
+  "description": "Iconify JSON IconSet port for @lobehub/icons",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.mjs"
+    },
+    "./icons.json": "./dist/icons.json",
+    "./info.json": "./dist/info.json",
+    "./metadata.json": "./dist/metadata.json",
+    "./*": "./*"
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "dependencies": {
+    "@iconify/types": "^2.0.0"
+  }
+}

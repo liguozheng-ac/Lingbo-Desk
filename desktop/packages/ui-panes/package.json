@@ -1,0 +1,22 @@
+{
+  "name": "@lingbo/ui-panes",
+  "type": "module",
+  "private": true,
+  "description": "Docking panes with tabs for LINGBO tool pages, built on Dockview",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/ui": "workspace:*",
+    "dockview-vue": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@histoire/plugin-vue": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

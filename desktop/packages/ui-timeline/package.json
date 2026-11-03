@@ -1,0 +1,31 @@
+{
+  "name": "@lingbo/ui-timeline",
+  "type": "module",
+  "private": true,
+  "description": "Timeline UI for Vue: headless parts for view, zoom, cursor, and keyboard, and the LINGBO-styled timeline",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./headless": "./src/headless/index.ts"
+  },
+  "scripts": {
+    "test:run": "vitest run",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/timeline-canvas": "workspace:*",
+    "@lingbo/ui": "workspace:*",
+    "@vueuse/core": "catalog:",
+    "reka-ui": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@histoire/plugin-vue": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vitest/browser-playwright": "catalog:vitest",
+    "unocss": "catalog:",
+    "vitest": "catalog:vitest",
+    "vitest-browser-vue": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

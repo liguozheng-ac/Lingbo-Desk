@@ -1,0 +1,512 @@
+// 升级容错：旧 config.json 的 LLM 块不可用时，不能连带把 security / temperature 等
+// 兄弟字段一起重置（升级后最常见的"配置全没了"根因）。
+//
+// 隔离策略：把 LINGBO_USER_DIR 指向临时目录，paths.configFile 随之落在临时目录里。
+// 每个场景重写同一个 config.json，再用带版本号的 URL 重新 import config.js（绕过模块缓存，
+// 让顶层加载逻辑对新文件重跑一遍；paths.js 已缓存，configFile 路径保持不变）。
+//
+// Run: node src/test-config-upgrade.js
+
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'blm-config-'))
+process.env.LINGBO_USER_DIR = tmp
+
+// 清掉可能存在的 LLM 环境变量，否则 LLM 块不可用时会走 env 兜底而误判为已激活
+for (const k of [
+  'DEEPSEEK_API_KEY', 'MINIMAX_API_KEY', 'OPENAI_API_KEY', 'DASHSCOPE_API_KEY',
+  'MOONSHOT_API_KEY', 'ZHIPU_API_KEY', 'MIMO_API_KEY',
+]) delete process.env[k]
+
+const configFile = path.join(tmp, 'config.json')
+const llmDir = path.join(tmp, 'llm')
+const voiceDir = path.join(tmp, 'voice')
+
+let failed = 0
+function assert(cond, label) {
+  if (!cond) { console.error(`FAIL: ${label}`); failed += 1; process.exitCode = 1 }
+  else console.log(`PASS: ${label}`)
+}
+
+const EXPECTED_BROWSER_TOOLS = [
+  'browser_navigate',
+  'browser_navigate_back',
+  'browser_navigate_forward',
+  'browser_reload',
+  'browser_snapshot',
+  'browser_find',
+  'browser_click',
+  'browser_type',
+  'browser_fill_form',
+  'browser_select_option',
+  'browser_press_key',
+  'browser_hover',
+  'browser_drag',
+  'browser_wait_for',
+  'browser_handle_dialog',
+  'browser_tabs',
+  'browser_take_screenshot',
+  'browser_console_messages',
+  'browser_resize',
+  'browser_close',
+]
+const REMOVED_WEB_AND_BROWSER_TOOLS = [
+  'web_search', 'web_read', 'fetch_url', 'browser_read',
+  'browser_sessions', 'browser_open', 'browser_inspect', 'browser_act',
+]
+
+let v = 0
+async function loadFresh(json) {
+  try { fs.rmSync(llmDir, { recursive: true, force: true }) } catch {}
+  try { fs.rmSync(voiceDir, { recursive: true, force: true }) } catch {}
+  fs.writeFileSync(configFile, JSON.stringify(json, null, 2), 'utf-8')
+  v += 1
+  return await import(`./config.js?v=${v}`)
+}
+
+// ── 场景 A：provider 是新版不认识的名字（模拟改名/删除的旧 provider）──
+{
+  const { config, getSecurity, getVoiceConfig, setSecurity } = await loadFresh({
+    provider: 'some-removed-provider',
+    apiKey: 'sk-whatever-old-key-1234567890',
+    model: 'old-model',
+    temperature: 1.3,
+    security: {
+      fileSandbox: false,
+      execSandbox: false,
+      browserPrivateNetwork: true,
+      blockedTools: [
+        'exec_command',
+        'web_search', 'web_read', 'fetch_url', 'browser_read',
+        'browser_open', 'browser_inspect', 'browser_act',
+      ],
+    },
+    voice: { voiceProvider: 'aliyun', aliyunApiKey: 'sk-aliyunkeyplaceholder1234567890' },
+  })
+  assert(config.needsActivation === true, 'A: 未知 provider → LLM 标记为待激活')
+  assert(config.provider === null, 'A: 未知 provider 不被错误激活')
+  // 关键：兄弟字段必须存活，不能被一起重置回默认
+  assert(config.temperature === 1.3, 'A: temperature 在 LLM 不可用时仍被保留')
+  assert(config.security.execSandbox === false, 'A: execSandbox=false 被保留（不会悄悄重新开启沙盒）')
+  assert(config.security.fileSandbox === false, 'A: fileSandbox=false 被保留')
+  assert(JSON.stringify(config.security.blockedTools) === JSON.stringify([
+    'run_command',
+    ...EXPECTED_BROWSER_TOOLS,
+  ]), 'A: legacy web/browser blocks migrate to the official Playwright allowlist and deduplicate')
+  assert(REMOVED_WEB_AND_BROWSER_TOOLS.every(name => !config.security.blockedTools.includes(name)),
+  'A: migrated security config no longer exposes removed web/browser names')
+  assert(getSecurity().browserPrivateNetwork === true, 'A: 独立 browserPrivateNetwork 权限被读取')
+  setSecurity({ browserPrivateNetwork: false })
+  assert(getSecurity().browserPrivateNetwork === false, 'A: setSecurity 可独立撤销 browserPrivateNetwork')
+  assert(JSON.parse(fs.readFileSync(configFile, 'utf-8')).security.browserPrivateNetwork === false,
+    'A: browserPrivateNetwork 变更持久化到 config.json')
+  const after = JSON.parse(fs.readFileSync(configFile, 'utf-8'))
+  assert(after.apiKey === 'sk-whatever-old-key-1234567890' && after.model === 'old-model',
+    'A: unknown provider keeps its only legacy credentials for later recovery')
+  assert(after.voice === undefined, 'A: voice 块已从 config.json 拆出')
+  assert(getVoiceConfig().aliyunApiKey.configured === true, 'A: 拆分后 Aliyun ASR key 仍可被读取')
+  assert(fs.existsSync(path.join(voiceDir, 'aliyun.json')), 'A: Aliyun ASR 配置已写入 voice/aliyun.json')
+}
+
+// ── 场景 B：合法 provider，但 model 在新版列表里已不存在 → 激活成功且回退默认，security 仍保留 ──
+{
+  const { config } = await loadFresh({
+    provider: 'deepseek',
+    apiKey: 'sk-deepseek-valid-key-1234567890',
+    model: 'deepseek-some-retired-model',
+    temperature: 0.9,
+    security: { execSandbox: false },
+  })
+  assert(config.needsActivation === false, 'B: 合法 provider 正常激活')
+  assert(config.provider === 'deepseek', 'B: provider 正确')
+  assert(config.model === 'deepseek-some-retired-model', 'B: official provider preserves unknown model names for manual entry')
+  assert(config.security.execSandbox === false, 'B: 激活路径下 security 同样保留')
+  assert(config.security.fileSandbox === false, 'B: 旧配置缺字段时文件沙箱默认关闭')
+  assert(config.security.browserPrivateNetwork === true, 'B: 旧配置缺字段时默认允许内置浏览器访问本机/私网')
+}
+
+// ── 场景 C：custom provider（baseURL + model 齐全）正常激活 ──
+{
+  const { config } = await loadFresh({
+    provider: 'custom',
+    apiKey: 'none',
+    model: 'my-local-model',
+    baseURL: 'http://127.0.0.1:1234/v1',
+  })
+  assert(config.needsActivation === false, 'C: custom provider 正常激活')
+  assert(config.provider === 'custom' && config.model === 'my-local-model', 'C: custom model 原样保留（不归一）')
+  assert(config.baseURL === 'http://127.0.0.1:1234/v1', 'C: custom baseURL 保留')
+}
+
+// ── 场景 D：损坏的 JSON → 整体回落未激活，不抛异常 ──
+{
+  fs.writeFileSync(configFile, '{ this is not valid json', 'utf-8')
+  v += 1
+  const { config } = await import(`./config.js?v=${v}`)
+  assert(config.needsActivation === true, 'D: 损坏文件 → 未激活且不崩溃')
+}
+
+// ── 场景 HB：心跳开关和默认间隔可持久化，并同步运行时默认节奏 ──
+{
+  const { config, getHeartbeatConfig, setHeartbeatConfig } = await loadFresh({
+    heartbeat: { enabled: false, defaultIntervalMinutes: 45 },
+  })
+  const loaded = getHeartbeatConfig()
+  assert(loaded.enabled === false, 'HB: 已保存的心跳关闭状态被加载')
+  assert(loaded.defaultIntervalMinutes === 45, 'HB: 已保存的默认心跳间隔被加载')
+  assert(config.tickInterval === 45 * 60 * 1000, 'HB: 默认心跳间隔同步到运行时毫秒值')
+
+  const updated = setHeartbeatConfig({ enabled: true, defaultIntervalMinutes: 90 })
+  assert(updated.enabled === true && updated.defaultIntervalMinutes === 90, 'HB: 心跳设置可即时更新')
+  const stored = JSON.parse(fs.readFileSync(configFile, 'utf-8'))
+  assert(stored.heartbeat.enabled === true, 'HB: 心跳开关写入 config.json')
+  assert(stored.heartbeat.defaultIntervalMinutes === 90, 'HB: 默认心跳间隔写入 config.json')
+  let invalidRejected = false
+  try { setHeartbeatConfig({ enabled: false, defaultIntervalMinutes: 0 }) } catch { invalidRejected = true }
+  assert(invalidRejected, 'HB: 拒绝超出范围的默认心跳间隔')
+  assert(getHeartbeatConfig().enabled === true, 'HB: 非法请求不会部分修改运行时心跳状态')
+}
+
+// Context-window chat/tool limits persist independently, migrate from the old
+// conversation/Tick split, and enforce toolCallLimit < chatMessageLimit atomically.
+{
+  const defaults = await loadFresh({})
+  assert(defaults.getSecurity().fileSandbox === false,
+    'SEC: file sandbox defaults to disabled')
+  assert(defaults.getSecurity().execSandbox === false,
+    'SEC: command sandbox defaults to disabled')
+  assert(defaults.getSecurity().browserPrivateNetwork === true,
+    'SEC: built-in browser allows localhost/private-network access by default')
+  assert(defaults.getContextWindowConfig().chatMessageLimit === 20,
+    'CTX: chat context defaults to 20 messages')
+  assert(defaults.getContextWindowConfig().toolCallLimit === 5,
+    'CTX: tool context defaults to 5 calls')
+
+  const mod = await loadFresh({
+    schemaVersion: 3,
+    contextWindow: { conversationMessageLimit: 12, tickMessageLimit: 34 },
+  })
+  assert(mod.getContextWindowConfig().chatMessageLimit === 12,
+    'CTX: legacy normal-conversation limit migrates to chat messages')
+  assert(mod.getContextWindowConfig().toolCallLimit === 5,
+    'CTX: legacy Tick limit is replaced by the independent tool-call default')
+  const migrated = JSON.parse(fs.readFileSync(configFile, 'utf-8'))
+  assert(migrated.contextWindow.conversationMessageLimit === undefined
+    && migrated.contextWindow.tickMessageLimit === undefined,
+  'CTX: obsolete normal/Tick fields are removed during migration')
+
+  const updated = mod.setContextWindowConfig({ chatMessageLimit: 30, toolCallLimit: 5 })
+  assert(updated.chatMessageLimit === 30 && updated.toolCallLimit === 5,
+    'CTX: both context limits update immediately')
+  const stored = JSON.parse(fs.readFileSync(configFile, 'utf-8'))
+  assert(stored.contextWindow.chatMessageLimit === 30 && stored.contextWindow.toolCallLimit === 5,
+    'CTX: context limits persist to config.json')
+
+  let invalidRejected = false
+  try { mod.setContextWindowConfig({ chatMessageLimit: 5, toolCallLimit: 5 }) } catch { invalidRejected = true }
+  assert(invalidRejected, 'CTX: tool limit equal to chat limit is rejected')
+  assert(mod.getContextWindowConfig().chatMessageLimit === 30
+    && mod.getContextWindowConfig().toolCallLimit === 5,
+    'CTX: invalid updates do not partially change settings')
+
+  const disabledTools = mod.setContextWindowConfig({ toolCallLimit: 0 })
+  assert(disabledTools.toolCallLimit === 0,
+    'CTX: zero disables historical tool-call injection')
+}
+
+// ── 场景 E：schema 迁移 v0 → v3，旧版 seedance、LLM 和 voice 块拆到独立文件 ──
+{
+  const seedanceFile = path.join(tmp, 'seedance.json')
+  try { fs.rmSync(seedanceFile, { force: true }) } catch {}
+  const { config } = await loadFresh({
+    provider: 'deepseek',
+    apiKey: 'sk-deepseek-valid-key-1234567890',
+    model: 'deepseek-v4-pro',
+    seedance: { apiKey: 'ark-legacy-key', model: 'doubao-seedance-x', baseURL: 'https://ark.example/v3' },
+    voice: { voiceProvider: 'aliyun', aliyunApiKey: 'sk-aliyunkeyplaceholder1234567890' },
+  })
+  assert(config.needsActivation === false, 'E: 迁移后 LLM 仍正常激活')
+  const after = JSON.parse(fs.readFileSync(configFile, 'utf-8'))
+  assert(after.schemaVersion === 4, 'E: config.json 被打上 schemaVersion=4')
+  assert(after.seedance === undefined, 'E: seedance 块已从 config.json 移除')
+  assert(after.apiKey === undefined && after.model === undefined && after.baseURL === undefined, 'E: LLM 凭据已从 config.json 移除')
+  assert(after.voice === undefined, 'E: voice 块已从 config.json 移除')
+  assert(fs.existsSync(seedanceFile), 'E: seedance.json 独立文件已生成')
+  const sd = JSON.parse(fs.readFileSync(seedanceFile, 'utf-8'))
+  assert(sd.apiKey === 'ark-legacy-key' && sd.model === 'doubao-seedance-x', 'E: seedance 数据完整搬迁')
+  const llmFile = path.join(llmDir, 'deepseek.json')
+  assert(fs.existsSync(llmFile), 'E: deepseek LLM 配置已拆到 llm/deepseek.json')
+  const llm = JSON.parse(fs.readFileSync(llmFile, 'utf-8'))
+  assert(llm.apiKey === 'sk-deepseek-valid-key-1234567890' && llm.model === 'deepseek-v4-pro', 'E: LLM provider 文件数据完整')
+  const voiceActive = JSON.parse(fs.readFileSync(path.join(voiceDir, 'active.json'), 'utf-8'))
+  const voiceAliyun = JSON.parse(fs.readFileSync(path.join(voiceDir, 'aliyun.json'), 'utf-8'))
+  assert(voiceActive.provider === 'aliyun', 'E: voice/active.json 记录当前 ASR provider')
+  assert(voiceAliyun.aliyunApiKey === 'sk-aliyunkeyplaceholder1234567890', 'E: Aliyun ASR 数据完整搬迁')
+}
+
+// Existing provider files are authoritative only if they contain a valid
+// matching record. Failed/partial migrations must not erase the usable source.
+{
+  const legacy = {
+    schemaVersion: 1,
+    provider: 'deepseek',
+    apiKey: 'sk-legacy-migration-test-key',
+    model: 'deepseek-v4-pro',
+    apiFormat: 'chat-completions',
+    temperature: 0.9,
+  }
+  const target = path.join(llmDir, 'deepseek.json')
+  const invalidTargets = [
+    ['malformed JSON', '{'],
+    ['missing key', JSON.stringify({ provider: 'deepseek', model: 'deepseek-v4-pro' })],
+    ['blank key', JSON.stringify({ provider: 'deepseek', apiKey: '  ' })],
+    ['wrong provider', JSON.stringify({ provider: 'openai', apiKey: 'sk-wrong-provider-test-key' })],
+  ]
+  const alternate = { provider: 'openai', apiKey: 'sk-alternate-test-key', model: 'gpt-5.5', apiFormat: 'responses' }
+  for (const [label, contents] of invalidTargets) {
+    fs.mkdirSync(llmDir, { recursive: true })
+    fs.writeFileSync(target, contents)
+    fs.writeFileSync(path.join(llmDir, 'openai.json'), JSON.stringify(alternate))
+    const previousBackups = new Set(fs.readdirSync(llmDir))
+    const original = JSON.stringify(legacy, null, 2)
+    fs.writeFileSync(configFile, original)
+    const mod = await import(`./config.js?v=${++v}`)
+    const backup = fs.readdirSync(llmDir).find(name => !previousBackups.has(name)
+      && name.startsWith('deepseek.json.migration-backup-'))
+    assert(backup && fs.readFileSync(path.join(llmDir, backup), 'utf8') === contents,
+      `E-recovery: ${label} target is backed up byte-for-byte before repair`)
+    assert(backup && (process.platform === 'win32'
+      || (fs.statSync(path.join(llmDir, backup)).mode & 0o777) === 0o600),
+    `E-recovery: ${label} backup is private to its owner`)
+    const migrated = JSON.parse(fs.readFileSync(configFile, 'utf8'))
+    assert(migrated.schemaVersion === 4 && migrated.apiKey === undefined,
+      `E-recovery: ${label} repaired target permits migration to finish`)
+    assert(!mod.config.needsActivation && mod.config.apiKey === legacy.apiKey
+      && mod.config.apiFormat === legacy.apiFormat,
+    `E-recovery: ${label} repair retains the valid legacy connection`)
+    mod.switchProviderConfig({ provider: 'openai' })
+    mod.switchProviderConfig({ provider: 'deepseek' })
+    const reloaded = await import(`./config.js?v=${++v}`)
+    assert(reloaded.config.apiKey === legacy.apiKey && reloaded.config.apiFormat === legacy.apiFormat,
+      `E-recovery: ${label} legacy credentials survive switching away, back and restarting`)
+  }
+
+  // Any backup/write failure must preserve the source and the damaged target.
+  for (const operation of ['backup', 'repair']) {
+    fs.writeFileSync(target, '{')
+    const original = JSON.stringify(legacy, null, 2)
+    fs.writeFileSync(configFile, original)
+    const writeFile = fs.writeFileSync
+    let mod
+    try {
+      fs.writeFileSync = function (file, ...args) {
+        if ((operation === 'backup' && String(file).startsWith(`${target}.migration-backup-`))
+          || (operation === 'repair' && String(file).startsWith(`${target}.`) && String(file).endsWith('.tmp'))) {
+          throw new Error(`Simulated ${operation} failure`)
+        }
+        return writeFile.call(this, file, ...args)
+      }
+      mod = await import(`./config.js?v=${++v}`)
+    } finally {
+      fs.writeFileSync = writeFile
+    }
+    assert(fs.readFileSync(configFile, 'utf8') === original
+      && fs.readFileSync(target, 'utf8') === '{',
+    `E-recovery: failed ${operation} preserves both original files`)
+    assert(!mod.config.needsActivation && mod.config.apiKey === legacy.apiKey,
+      `E-recovery: failed ${operation} still permits legacy activation`)
+    // The setter must retry preservation if migration could not complete.
+    mod.switchProviderConfig({ provider: 'openai' })
+    mod.switchProviderConfig({ provider: 'deepseek' })
+    assert(mod.config.apiKey === legacy.apiKey,
+      `E-recovery: provider switching safely retries a previously failed ${operation}`)
+  }
+
+  const validTarget = JSON.stringify({
+    provider: 'deepseek',
+    apiKey: 'sk-newer-provider-test-key',
+    model: 'deepseek-v5-preview',
+    apiFormat: 'responses',
+  }, null, 2)
+  fs.writeFileSync(target, validTarget)
+  fs.writeFileSync(configFile, JSON.stringify(legacy, null, 2))
+  const mod = await import(`./config.js?v=${++v}`)
+  assert(fs.readFileSync(target, 'utf8') === validTarget,
+    'E-recovery: an existing valid provider configuration is never overwritten by legacy values')
+  assert(mod.config.apiKey === 'sk-newer-provider-test-key' && mod.config.apiFormat === 'responses',
+    'E-recovery: the existing valid provider configuration remains authoritative')
+  const migrated = JSON.parse(fs.readFileSync(configFile, 'utf8'))
+  assert(migrated.schemaVersion === 4 && migrated.apiKey === undefined
+    && migrated.apiFormat === undefined && migrated.temperature === legacy.temperature,
+  'E-recovery: migration removes legacy credentials only after validating their destination')
+}
+
+// Required custom fields containing whitespace are not usable destinations.
+{
+  const legacy = {
+    schemaVersion: 1, provider: 'custom', apiKey: 'none',
+    model: 'local-fixture', baseURL: 'http://127.0.0.1:11434/v1',
+  }
+  const target = path.join(llmDir, 'custom.json')
+  for (const field of ['baseURL', 'model']) {
+    const broken = JSON.stringify({ ...legacy, [field]: '  ' })
+    fs.writeFileSync(target, broken)
+    fs.writeFileSync(configFile, JSON.stringify(legacy))
+    const mod = await import(`./config.js?v=${++v}`)
+    assert(mod.config.baseURL === legacy.baseURL && mod.config.model === legacy.model,
+      `E-recovery: blank custom ${field} is repaired from the usable legacy record`)
+    assert(fs.readdirSync(llmDir).some(name => name.startsWith('custom.json.migration-backup-')
+      && fs.readFileSync(path.join(llmDir, name), 'utf8') === broken),
+    `E-recovery: blank custom ${field} retains its original file in a backup`)
+  }
+}
+
+// Unknown providers may be activated by future versions or recovered manually.
+// Selecting a supported provider must archive their full identity and secrets.
+{
+  const mod = await loadFresh({
+    schemaVersion: 1, provider: 'retired-provider', apiKey: 'sk-retired-test-key',
+    model: 'retired-model', baseURL: 'https://retired.example/v1', apiFormat: 'responses',
+  })
+  fs.mkdirSync(llmDir, { recursive: true })
+  fs.writeFileSync(path.join(llmDir, 'openai.json'), JSON.stringify({
+    provider: 'openai', apiKey: 'sk-supported-test-key', model: 'gpt-5.5',
+  }))
+  const original = fs.readFileSync(configFile, 'utf8')
+  const previousFiles = new Set(fs.readdirSync(tmp))
+  mod.switchProviderConfig({ provider: 'openai' })
+  const backup = fs.readdirSync(tmp).find(name => !previousFiles.has(name)
+    && name.startsWith('config.json.migration-backup-'))
+  assert(backup && fs.readFileSync(path.join(tmp, backup), 'utf8') === original,
+    'E-recovery: switching away from an unknown provider archives its complete configuration')
+  assert(mod.config.provider === 'openai'
+    && JSON.parse(fs.readFileSync(configFile, 'utf8')).provider === 'openai',
+  'E-recovery: the supported provider can be selected after the unknown configuration is secured')
+}
+
+// ── 场景 F：已是最新 schemaVersion 的文件不被重复迁移 / 改写 ──
+{
+  await loadFresh({
+    schemaVersion: 4,
+    provider: 'deepseek',
+  })
+  const after = JSON.parse(fs.readFileSync(configFile, 'utf-8'))
+  assert(after.schemaVersion === 4, 'F: 最新版本号保持不变')
+}
+
+// 清理
+// Scenario G: MiMo falls back from the v2.5 Pro default to the remaining MiMo models.
+{
+  const { DEFAULT_MIMO_MODEL, MIMO_PROVIDER, getProviderModelFallbacks } = await loadFresh({ schemaVersion: 4 })
+  const chain = getProviderModelFallbacks(MIMO_PROVIDER, DEFAULT_MIMO_MODEL)
+  assert(chain[0] === 'mimo-v2.5-pro', 'G: MiMo fallback starts with the v2.5 Pro default')
+  assert(chain[1] === 'mimo-v2.5', 'G: MiMo fallback tries standard v2.5 next')
+  assert(chain.includes('MiMo-V2.5-Pro-UltraSpeed'), 'G: UltraSpeed (极速版) stays available as a fallback option')
+  assert(new Set(chain).size === chain.length, 'G: MiMo fallback chain has no duplicates')
+  const customChain = getProviderModelFallbacks(MIMO_PROVIDER, 'future-mimo-model')
+  assert(customChain[0] === 'future-mimo-model', 'G: custom MiMo model is tried before built-in fallbacks')
+  assert(customChain.includes(DEFAULT_MIMO_MODEL), 'G: custom MiMo model still keeps built-in fallbacks')
+}
+
+// Scenario H: Zhipu defaults to GLM-5.1 and validates through Responses.
+{
+  const { DEFAULT_ZHIPU_MODEL, ZHIPU_PROVIDER, getProviderModelFallbacks, __internals } = await loadFresh({ schemaVersion: 4 })
+  assert(DEFAULT_ZHIPU_MODEL === 'glm-5.1', 'H: Zhipu default model is GLM-5.1')
+  const zhipuModels = new Set(__internals.ZHIPU_MODELS.map(m => m.id))
+  assert(zhipuModels.has('glm-5.1'), 'H: Zhipu model list includes glm-5.1')
+  assert(zhipuModels.has('glm-5-turbo'), 'H: Zhipu model list includes glm-5-turbo')
+  assert(zhipuModels.has('glm-5'), 'H: Zhipu model list includes glm-5')
+  const customChain = getProviderModelFallbacks(ZHIPU_PROVIDER, 'future-glm-model')
+  assert(customChain.length === 1 && customChain[0] === 'future-glm-model', 'H: custom Zhipu model is preserved')
+  const ping = __internals.buildPingParams(ZHIPU_PROVIDER, DEFAULT_ZHIPU_MODEL)
+  assert(Array.isArray(ping.input) && ping.input[0]?.type === 'message', 'H: Zhipu activation ping uses Responses input Items')
+  assert(ping.max_output_tokens === 32, 'H: Zhipu activation ping uses max_output_tokens')
+}
+
+// Scenario I: provider files preserve old keys and allow switching back without re-entering a key.
+{
+  const { DEFAULT_MOONSHOT_MODEL, MOONSHOT_PROVIDER, __internals } = await loadFresh({ schemaVersion: 2 })
+  assert(DEFAULT_MOONSHOT_MODEL === 'kimi-k2.6', 'I: Moonshot defaults to kimi-k2.6')
+  const moonshotModels = new Set(__internals.MOONSHOT_MODELS.map(m => m.id))
+  assert(moonshotModels.has('kimi-k2.7-code'), 'I: Moonshot list includes kimi-k2.7-code')
+  assert(moonshotModels.has('kimi-k2.7-code-highspeed'), 'I: Moonshot list includes kimi-k2.7-code-highspeed')
+  assert(moonshotModels.has('kimi-k2.6'), 'I: Moonshot list includes kimi-k2.6')
+  assert(moonshotModels.has('moonshot-v1-128k'), 'I: Moonshot list includes moonshot-v1-128k')
+  const ping = __internals.buildPingParams(MOONSHOT_PROVIDER, 'kimi-k2.6')
+  assert(ping.temperature === undefined, 'I: Kimi activation ping omits temperature')
+}
+
+// Scenario J: provider files preserve old keys and allow switching back without re-entering a key.
+{
+  const mod = await loadFresh({
+    provider: 'deepseek',
+    apiKey: 'sk-deepseek-valid-key-1234567890',
+    model: 'deepseek-v4-pro',
+  })
+  mod.commitPreparedActivation({
+    provider: 'openai',
+    apiKey: 'sk-openai-valid-key-1234567890',
+    model: 'gpt-4o-mini',
+  })
+  const deepseekFile = path.join(llmDir, 'deepseek.json')
+  const openaiFile = path.join(llmDir, 'openai.json')
+  assert(fs.existsSync(deepseekFile), 'I: 配置新 provider 后 deepseek 文件仍保留')
+  assert(fs.existsSync(openaiFile), 'I: 新 provider 写入 openai 文件')
+  const deepseekCfg = JSON.parse(fs.readFileSync(deepseekFile, 'utf-8'))
+  assert(deepseekCfg.apiKey === 'sk-deepseek-valid-key-1234567890', 'I: 旧 provider key 未被覆盖')
+  const switched = mod.switchProviderConfig({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+  assert(switched.provider === 'deepseek' && mod.config.apiKey === 'sk-deepseek-valid-key-1234567890', 'I: 无需重新输入 key 即可切回旧 provider')
+}
+
+// Scenario K: old records default to Responses, while an explicit format survives
+// legacy migration, model changes, provider switches, and restart.
+{
+  const legacy = await loadFresh({
+    provider: 'deepseek',
+    apiKey: 'sk-deepseek-format-test-key',
+    model: 'deepseek-v4-pro',
+  })
+  const deepseekFile = path.join(llmDir, 'deepseek.json')
+  assert(legacy.config.apiFormat === 'responses', 'K: 旧单文件配置缺少 apiFormat 时保留 Responses')
+  assert(JSON.parse(fs.readFileSync(deepseekFile, 'utf8')).apiFormat === 'responses', 'K: 迁移写入 provider 格式')
+
+  // Existing v4 provider files may also lack this new field.
+  const oldRecord = JSON.parse(fs.readFileSync(deepseekFile, 'utf8'))
+  delete oldRecord.apiFormat
+  fs.writeFileSync(deepseekFile, JSON.stringify(oldRecord), 'utf8')
+  const oldProviderReload = await import(`./config.js?v=${++v}`)
+  assert(oldProviderReload.config.apiFormat === 'responses', 'K: 旧 provider 文件缺少格式时正常加载')
+  oldProviderReload.switchModel('deepseek-v4-flash')
+  assert(JSON.parse(fs.readFileSync(deepseekFile, 'utf8')).apiFormat === 'responses', 'K: 后续保存补齐旧 provider 的默认格式')
+
+  const explicit = await loadFresh({
+    provider: 'custom',
+    apiKey: 'none',
+    model: 'local-model',
+    baseURL: 'http://127.0.0.1:11434/v1',
+    apiFormat: 'chat-completions',
+    temperature: 0.7,
+  })
+  assert(explicit.config.apiFormat === 'chat-completions', 'K: 旧单文件中的显式格式迁移后保留')
+  assert(JSON.parse(fs.readFileSync(configFile, 'utf8')).apiFormat === undefined, 'K: 主配置不保留全局协议字段')
+  explicit.switchModel('local-model-v2')
+  explicit.commitPreparedActivation({
+    provider: 'openai',
+    apiKey: 'sk-openai-format-test-key',
+    model: 'gpt-4o-mini',
+  })
+  assert(explicit.config.apiFormat === 'responses', 'K: 旧 prepared 对象缺少格式时仍为 Responses')
+  explicit.switchProviderConfig({ provider: 'custom' })
+  const reload = await import(`./config.js?v=${++v}`)
+  assert(reload.config.apiFormat === 'chat-completions', 'K: 切回 provider 并重启后保留 Chat Completions')
+  assert(reload.config.model === 'local-model-v2', 'K: 切换模型未丢失 provider 配置')
+  assert(reload.getProviderSummaries().openai.apiFormat === 'responses', 'K: 各 provider 格式独立保存')
+  assert(reload.config.temperature === 0.7, 'K: 协议迁移不影响通用设置')
+}
+
+try { fs.rmSync(tmp, { recursive: true, force: true }) } catch {}
+
+if (failed > 0) process.exit(1)
+console.log('\nAll config upgrade tests passed.')

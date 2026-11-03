@@ -1,0 +1,51 @@
+{
+  "name": "@lingbo/stage-ui-mmd",
+  "type": "module",
+  "private": true,
+  "description": "MMD (MikuMikuDance) scene components and stores for Lingbo Desk",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components": "./src/components/index.ts",
+    "./components/scenes": "./src/components/scenes/index.ts",
+    "./components/scenes/MMD.vue": "./src/components/scenes/MMD.vue",
+    "./composables/mmd": "./src/composables/mmd/index.ts",
+    "./constants/emotions": "./src/constants/emotions.ts",
+    "./stores": "./src/stores/index.ts",
+    "./stores/mmd": "./src/stores/mmd.ts",
+    "./utils/mmd-loader": "./src/utils/mmd-loader.ts",
+    "./utils/mmd-preview": "./src/utils/mmd-preview.ts",
+    "./utils/mmd-validator": "./src/utils/mmd-validator.ts",
+    "./utils/mmd-zip-loader": "./src/utils/mmd-zip-loader.ts",
+    "./utils/opfs-loader": "./src/utils/opfs-loader.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/model-driver-lipsync": "workspace:*",
+    "@lingbo/stage-shared": "workspace:*",
+    "@lingbo/ui": "workspace:*",
+    "@moeru/std": "catalog:",
+    "@moeru/three-mmd": "catalog:",
+    "@moeru/three-mmd-physics-ammo": "catalog:",
+    "@vueuse/core": "catalog:",
+    "@xsai/tool": "catalog:",
+    "culori": "catalog:",
+    "es-toolkit": "catalog:",
+    "jszip": "catalog:",
+    "localforage": "catalog:",
+    "nanoid": "catalog:",
+    "pinia": "catalog:",
+    "three": "catalog:",
+    "three-stdlib": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@types/culori": "catalog:",
+    "@types/three": "catalog:",
+    "@vitest/browser-playwright": "catalog:vitest",
+    "vitest": "catalog:vitest",
+    "vue-tsc": "catalog:"
+  }
+}

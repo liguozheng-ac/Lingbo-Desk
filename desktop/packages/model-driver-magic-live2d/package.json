@@ -1,0 +1,30 @@
+{
+  "name": "@lingbo/model-driver-magic-live2d",
+  "type": "module",
+  "version": "0.14.1",
+  "private": true,
+  "description": "Live2D model driver for MAGIC motion",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/motion-driver-magic": "workspace:*",
+    "es-toolkit": "catalog:"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@lingbo/font-xiaolai",
+  "type": "module",
+  "version": "0.14.1",
+  "description": "Essential CSS for font, Xiaolai (小赖字体 / 小賴字體 / シャオライ / Xiaolai Font), used by Lingbo Desk",
+  "license": "SIL Open Font License",
+  "exports": {
+    ".": {
+      "default": "./dist/index.css"
+    },
+    "./index.css": {
+      "default": "./dist/index.css"
+    },
+    "./files/*": {
+      "default": "./dist/files/*"
+    },
+    "./files/*.ttf": {
+      "default": "./dist/files/*.ttf"
+    },
+    "./*": {
+      "default": "./*.css"
+    }
+  },
+  "main": "./dist/index.css",
+  "scripts": {
+    "dev": "pnpm run build",
+    "build": "tsdown"
+  }
+}

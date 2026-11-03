@@ -1,0 +1,37 @@
+{
+  "name": "@lingbo/server-sdk",
+  "type": "module",
+  "version": "0.14.1",
+  "description": "Client-side SDK implementation for connecting to LINGBO server components and runtimes",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./utils/node": {
+      "types": "./dist/utils/node/index.d.mts",
+      "default": "./dist/utils/node/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "test:run": "vitest run --config vitest.config.ts",
+    "dev": "pnpm run build",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lingbo/better-ws": "workspace:*",
+    "@lingbo/server-shared": "workspace:*",
+    "@moeru/std": "catalog:",
+    "superjson": "catalog:",
+    "valibot": "catalog:"
+  }
+}

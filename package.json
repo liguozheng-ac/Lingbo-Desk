@@ -1,0 +1,19 @@
+{
+  "name": "lingbo-desk",
+  "version": "0.3.0",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env backend/server.mjs",
+    "test": "node --test backend/test/*.test.mjs",
+    "check:source": "node scripts/check-source.mjs",
+    "prepare:desktop": "node scripts/prepare-desktop.mjs",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "dev:desktop": "node scripts/build-desktop.mjs --dev",
+    "verify:task": "node scripts/verify-task.mjs"
+  }
+}

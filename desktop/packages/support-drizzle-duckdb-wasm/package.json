@@ -1,0 +1,61 @@
+{
+  "name": "@lingbo/drizzle-duckdb-wasm",
+  "type": "module",
+  "version": "0.6.0",
+  "description": "🦆 Drizzle ORM driver for @duckdb/duckdb-wasm that works on both browser and Node.js environments",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./migrator": {
+      "types": "./dist/migrator.d.mts",
+      "default": "./dist/migrator.mjs"
+    },
+    "./bundles/default-browser": {
+      "types": "./dist/bundles/default-browser.d.mts",
+      "import": "./dist/bundles/default-browser.mjs"
+    },
+    "./bundles/default-node": {
+      "types": "./dist/bundles/default-node.d.mts",
+      "import": "./dist/bundles/default-node.mjs",
+      "node": "./dist/bundles/default-node.mjs"
+    },
+    "./bundles/import-url-browser": {
+      "types": "./dist/bundles/import-url-browser.d.mts",
+      "import": "./dist/bundles/import-url-browser.mjs"
+    },
+    "./bundles/import-url-node": {
+      "types": "./dist/bundles/import-url-node.d.mts",
+      "import": "./dist/bundles/import-url-node.mjs",
+      "node": "./dist/bundles/import-url-node.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "peerDependencies": {
+    "drizzle-orm": ">=0.40.0",
+    "web-worker": "^1.5.0"
+  },
+  "peerDependenciesMeta": {
+    "web-worker": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@date-fns/tz": "^1.5.0",
+    "@duckdb/duckdb-wasm": "1.29.1-dev68.0",
+    "@moeru/std": "0.1.0-beta.1",
+    "apache-arrow": "^21.2.0",
+    "date-fns": "^4.4.0",
+    "es-toolkit": "^1.50.0",
+    "@lingbo/duckdb-wasm": "workspace:*"
+  }
+}

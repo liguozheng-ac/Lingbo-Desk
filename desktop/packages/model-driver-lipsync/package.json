@@ -1,0 +1,24 @@
+{
+  "name": "@lingbo/model-driver-lipsync",
+  "type": "module",
+  "version": "0.14.1",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./live2d": "./src/live2d/index.ts",
+    "./runtime/wlipsync": "./src/runtime/wlipsync/index.ts",
+    "./shared/wlipsync": "./src/shared/wlipsync/index.ts",
+    "./shared/wlipsync/profile.json": "./src/shared/wlipsync/profile.json"
+  },
+  "scripts": {
+    "test:run": "vitest run --config vitest.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "wlipsync": "catalog:"
+  },
+  "devDependencies": {
+    "vitest": "catalog:vitest"
+  }
+}

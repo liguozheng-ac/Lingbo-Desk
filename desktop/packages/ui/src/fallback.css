@@ -1,0 +1,7 @@
+:root {
+  --chromatic-hue: 220.44;
+}
+
+.is-interacting {
+  transition-property: none !important;
+}

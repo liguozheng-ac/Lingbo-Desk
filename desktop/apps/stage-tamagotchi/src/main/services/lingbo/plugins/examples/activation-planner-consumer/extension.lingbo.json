@@ -1,0 +1,24 @@
+{
+  "manifestVersion": 2,
+  "kind": "manifest.extension.lingbo.local",
+  "id": "activation-planner-consumer",
+  "version": "1.0.0",
+  "engines": {
+    "lingbo": "*",
+    "runtimes": [
+      "electron"
+    ]
+  },
+  "entrypoints": {
+    "electron": "./activation-planner-consumer.mjs"
+  },
+  "permissions": {},
+  "kits": {
+    "uses": [
+      {
+        "id": "dev.lingbo.example-activation",
+        "version": "^1.0.0"
+      }
+    ]
+  }
+}

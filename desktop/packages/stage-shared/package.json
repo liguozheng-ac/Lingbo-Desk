@@ -1,0 +1,47 @@
+{
+  "name": "@lingbo/stage-shared",
+  "type": "module",
+  "private": true,
+  "description": "Shared",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./analytics/openpanel": "./src/analytics/openpanel.ts",
+    "./beat-sync": "./src/beat-sync/index.ts",
+    "./global-shortcut": "./src/global-shortcut/index.ts",
+    "./godot-stage": "./src/godot-stage/index.ts",
+    "./model-assets": "./src/model-assets/index.ts",
+    "./plugin-host": "./src/plugin-host.ts",
+    "./screen-ambient-light": "./src/screen-ambient-light/index.ts",
+    "./server-channel-qr": "./src/server-channel-qr.ts",
+    "./settings-search": "./src/settings-search/index.ts",
+    "./speaker-model": "./src/speaker-model.ts",
+    "./stores/screen-ambient-light": "./src/stores/screen-ambient-light.ts",
+    "./types/io-trace": "./src/types/io-trace.ts",
+    "./types/pinia-action-event": "./src/types/pinia-action-event.ts",
+    "./electron-renderer": "./src/electron-renderer.d.ts",
+    "./composables": "./src/composables/index.ts",
+    "./webgpu": "./src/webgpu/index.ts"
+  },
+  "scripts": {
+    "test:run": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@moeru/std": "catalog:",
+    "@vueuse/core": "catalog:",
+    "gpuu": "catalog:",
+    "ofetch": "catalog:",
+    "pinia": "catalog:",
+    "valibot": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "catalog:",
+    "@lingbo/electron-screen-capture": "workspace:*",
+    "@moeru/eventa": "catalog:",
+    "@nekopaw/tempora": "catalog:",
+    "@types/audioworklet": "catalog:"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@lingbo/input-gamepad-vueuse",
+  "type": "module",
+  "version": "0.14.1",
+  "private": true,
+  "description": "Vue composables for LINGBO gamepad input",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "test:run": "vitest run --config vitest.config.ts",
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vue": ">=3.5"
+  },
+  "dependencies": {
+    "@lingbo/input-gamepad": "workspace:*",
+    "@vueuse/core": "catalog:"
+  },
+  "devDependencies": {
+    "vue": "catalog:"
+  }
+}

@@ -1,0 +1,99 @@
+import type { PluginOption } from 'vite'
+
+import { resolve } from 'node:path'
+
+import { paraformerBilingualZhEn, xAsrBilingualZhEnInt8, zipformerMultilingual } from '@lingbo/provider-inference/sherpaw-transcription/models'
+import { speakerModel } from '@lingbo/stage-shared/speaker-model'
+import { kwsModel } from '@lingbo/stage-ui/libs/voice/kws-model-info'
+import { Sherpaw } from '@lingbo/vite-plugin-sherpaw'
+import { defineConfig } from 'electron-vite'
+
+import base from './electron.vite.config'
+
+// The configuration loader needs the explicit runtime module extension.
+// eslint-disable-next-line no-restricted-syntax
+import { patchComputerUseRuntime, patchComputerUseTools } from './computer-use-runtime-patch.mjs'
+
+function validationPlugin(plugin: PluginOption): PluginOption {
+  if (Array.isArray(plugin))
+    return plugin.map(validationPlugin)
+  if (plugin && typeof plugin === 'object' && 'name' in plugin && /vue-devtools|vue-inspector|^lingbo-sherpaw-models$/.test(plugin.name))
+    return false
+  return plugin
+}
+
+// NOTICE:
+// This isolated validation uses cloud ASR and TTS.
+// The upstream config downloads local wake-word and voiceprint models.
+// Source: electron.vite.config.ts and @lingbo/vite-plugin-sherpaw.
+// Remove this config when validating local speech inference.
+export default defineConfig({
+  ...base,
+  main: {
+    ...base.main,
+    plugins: [
+      ...(base.main?.plugins ?? []),
+      {
+        name: 'lingbo-desktop-windows-dpi',
+        enforce: 'pre',
+        transform(code, id) {
+          if (id.replaceAll('\\', '/').endsWith('/src/main/services/lingbo/computer-use/runtime.ts'))
+            return patchComputerUseRuntime(code)
+        },
+      },
+    ],
+  },
+  preload: {
+    ...base.preload,
+    build: { ...base.preload?.build, isolatedEntries: true, externalizeDeps: false, rolldownOptions: {} },
+  },
+  renderer: {
+    ...base.renderer,
+    server: { ...base.renderer?.server, port: 5173, strictPort: true },
+    plugins: [
+      {
+        name: 'lingbo-desktop-windows-computer-instructions',
+        enforce: 'pre',
+        transform(code, id) {
+          if (id.replaceAll('\\', '/').endsWith('/src/renderer/stores/tools/builtin/computer-use.ts'))
+            return patchComputerUseTools(code)
+        },
+      },
+      {
+        name: 'lingbo-release-module-paths',
+        renderChunk(code) {
+          return { code: code.replaceAll('@lingbo+', '@lingbo+'), map: null }
+        },
+      },
+      {
+        name: 'lingbo-desktop-task-events',
+        transformIndexHtml: {
+          order: 'pre',
+          handler() {
+            return [{ tag: 'script', attrs: { type: 'module', src: '/bridges/lingbo-integration.mjs' }, injectTo: 'body' }]
+          },
+        },
+      },
+      {
+        // NOTICE:
+        // Chat stickers are outside this voice and file-task validation.
+        // The source archive download stopped before all sticker PNG files arrived.
+        // Source: packages/stage-ui/src/assets/stickers/index.ts.
+        // Remove this plugin after the original sticker assets are available.
+        name: 'lingbo-desktop-no-chat-stickers',
+        enforce: 'pre',
+        load(id) {
+          if (id.replaceAll('\\', '/').endsWith('/packages/stage-ui/src/assets/stickers/index.ts'))
+            return 'export const chatStickers = []'
+        },
+      },
+      ...(base.renderer?.plugins ?? []).map(validationPlugin),
+      Sherpaw({
+        models: [paraformerBilingualZhEn, zipformerMultilingual, xAsrBilingualZhEnInt8, kwsModel, speakerModel],
+        developmentModels: [],
+        bundledModels: [],
+        cacheDir: resolve(import.meta.dirname, '../../.cache'),
+      }),
+    ],
+  },
+})

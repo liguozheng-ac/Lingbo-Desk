@@ -1,0 +1,116 @@
+import type {
+  ExtensionIdentity,
+  ExtensionModuleIdentity,
+  ModulePermissionDeclaration,
+  ModulePermissionGrant,
+} from '@lingbo/plugin-protocol/types'
+
+import type { KitAvailability, KitContract, KitProvider, KitProviderHandle, KitRef, KitUseResult } from '../kit'
+import type { Disposable, DisposableStore } from './disposable'
+
+/**
+ * Describes an optional advanced lifecycle/attribution scope inside an extension session.
+ */
+export interface RegisterExtensionModuleInput {
+  /** Stable module id within the current extension session. */
+  id: string
+  /**
+   * Runtime permissions this module actually intends to use.
+   *
+   * The host intersects these requests with the extension manifest grant, so a
+   * module can never widen access beyond the package/session-level ceiling.
+   */
+  permissions?: ModulePermissionDeclaration
+  /** Optional labels used for routing, policy, and inspection. */
+  labels?: Record<string, string>
+}
+
+/**
+ * Consumer operations for trusted Host-provided Kits.
+ */
+export interface ExtensionKitConsumer {
+  use: <TClient>(kit: KitRef<TClient>) => Promise<TClient>
+  tryUse: <TClient>(kit: KitRef<TClient>) => Promise<KitUseResult<TClient>>
+  watch: <TClient>(
+    kit: KitRef<TClient>,
+    callback: (availability: KitAvailability<TClient>) => void | Promise<void>,
+  ) => Disposable
+}
+
+/** Root setup can provide Kits declared by its Manifest. Module scopes only consume Kits. */
+export interface ExtensionKitRegistry extends ExtensionKitConsumer {
+  /**
+   * Fills one Provider reservation in the current Extension setup transaction.
+   * The Provider remains pending until the Host commits the complete transaction.
+   *
+   * @param contract Contract identity and member definitions.
+   * @param provider Exact method handlers accepted for this registration.
+   */
+  provide: <TContract extends KitContract>(contract: TContract, provider: KitProvider<TContract>) => KitProviderHandle
+}
+
+/**
+ * Runtime context returned from module registration.
+ */
+export interface ExtensionModuleContext {
+  /** Stable module id within the current extension session. */
+  id: string
+  /** Protocol identity for this module. */
+  identity: ExtensionModuleIdentity
+  /** Effective grant after applying the extension-level permission ceiling. */
+  permissions: ModulePermissionGrant
+  /** Module-scoped kit access for attribution and optional lifecycle cleanup. */
+  kits: ExtensionKitConsumer
+  /** Cleanup callbacks owned by this module. */
+  subscriptions: DisposableStore
+  /** Disposes module-owned resources. */
+  dispose: () => Promise<void>
+}
+
+/**
+ * Narrow module reference exposed to extension authors.
+ */
+export interface ExtensionModuleRef {
+  /** Stable module id within the current extension session. */
+  id: string
+  /** Module-scoped kit access for attribution and optional lifecycle cleanup. */
+  kits: ExtensionKitConsumer
+  /** Cleanup callbacks owned by this module. */
+  subscriptions: DisposableStore
+  /** Disposes module-owned resources. */
+  dispose: () => Promise<void>
+}
+
+/**
+ * Optional module scope API exposed during extension setup.
+ *
+ * Modules are not required for basic kit usage. Use them when a host needs a
+ * contribution to have its own cleanup, inspection, or future restart boundary.
+ */
+export interface ExtensionModuleRegistry {
+  register: (input: RegisterExtensionModuleInput) => Promise<ExtensionModuleContext>
+}
+
+/**
+ * Host-provided setup context for one extension session.
+ */
+export interface ExtensionSetupContext {
+  /** Current extension session identity. */
+  extension: ExtensionIdentity
+  /** Extension-session cleanup callbacks. */
+  subscriptions: DisposableStore
+  /** Root setup can consume Host Kits and provide Kits declared by its Manifest. */
+  kits: ExtensionKitRegistry
+  /** Optional advanced lifecycle/attribution scopes. */
+  modules: ExtensionModuleRegistry
+}
+
+/**
+ * Public extension authoring contract returned by `defineExtension`.
+ */
+export interface Extension {
+  /** Stable extension id from the manifest/package. */
+  id: string
+  /** Runs extension initialization. */
+  setup: (ctx: ExtensionSetupContext) => Promise<void> | void
+}
