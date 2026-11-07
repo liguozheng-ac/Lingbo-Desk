@@ -14,6 +14,11 @@
     "prepare:desktop": "node scripts/prepare-desktop.mjs",
     "build:desktop": "node scripts/build-desktop.mjs",
     "dev:desktop": "node scripts/build-desktop.mjs --dev",
-    "verify:task": "node scripts/verify-task.mjs"
+    "verify:task": "node scripts/verify-task.mjs",
+    "verify:tool-boundaries": "node scripts/verify-tool-boundaries.mjs",
+    "verify:diagnostic-privacy": "node scripts/verify-diagnostic-privacy.mjs",
+    "verify:report": "node scripts/verify-report.mjs",
+    "package:desktop": "node scripts/package-desktop.mjs",
+    "verify:package": "node scripts/verify-package.mjs"
   }
 }

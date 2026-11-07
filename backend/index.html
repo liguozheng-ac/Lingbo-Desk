@@ -9,6 +9,14 @@ body{max-width:960px;margin:32px auto;padding:0 24px;background:#f5f8fc;color:#2
 <h1>聆泊 · 工作台</h1>
 <p>这个网页用于管理任务和设置。<strong>语音聊天在桌面Hiyori窗口中。</strong> <a href="http://127.0.0.1:3850/">打开本机任务台</a></p>
 <noscript>页面需要 JavaScript。请使用正常启用脚本的浏览器打开本机任务台。</noscript>
+<section id="services"><h2>首次使用与服务配置</h2><p>先配置需要的服务，再在“模型选择”验证并切换。Ollama 可单独使用，无需 DeepSeek 密钥；语音识别和合成需分别配置。</p>
+<form id="services-form" autocomplete="off">
+<label>DeepSeek API Key <input id="service-deepseekKey" type="password" autocomplete="new-password" spellcheck="false" maxlength="4096" placeholder="留空保留已有配置"></label><p id="service-deepseekKey-state"></p><label><input id="service-deepseekKey-clear" type="checkbox">清除并停用此密钥（包括环境变量回退）</label>
+<label>阿里云 ASR API Key <input id="service-asrKey" type="password" autocomplete="new-password" spellcheck="false" maxlength="4096" placeholder="留空保留已有配置"></label><p id="service-asrKey-state"></p><label><input id="service-asrKey-clear" type="checkbox">清除并停用此密钥（包括环境变量回退）</label>
+<label>豆包 TTS API Key <input id="service-ttsKey" type="password" autocomplete="new-password" spellcheck="false" maxlength="4096" placeholder="留空保留已有配置"></label><p id="service-ttsKey-state"></p><label><input id="service-ttsKey-clear" type="checkbox">清除并停用此密钥（包括环境变量回退）</label>
+<button id="services-save" class="primary" type="submit">加密保存到本机</button></form><p id="services-storage" class="muted"></p>
+<div><button data-service-probe="deepseek">检查 DeepSeek</button><button data-service-probe="ollama">检查 Ollama</button><button data-service-probe="asr">检查 ASR 连接</button><button data-service-probe="tts">检查 TTS 合成</button></div>
+<small>检查云端连接会使用正常 API 用量。ASR 只检查鉴权与会话建立；TTS 合成一句测试文字但不播放声音。检查通过不代表完整语音或任务能力已验收。密钥只发送给本机服务及对应服务商，不写入聊天记忆。</small><p id="services-result" role="status"></p></section>
 <section><h2>开始语音聊天</h2>
 <ol class="steps"><li>双击桌面或开始菜单里的 <strong>聆泊</strong>，找到角色窗口。</li><li>鼠标移到角色窗口内，点击 <strong>麦克风图标</strong> 开启输入；带斜杠表示关闭。</li><li>保持 <strong>喇叭图标</strong> 取消静音，回复会从当前扬声器或耳机播放。点击聊天气泡查看文字。</li></ol>
 <p id="desktop-state" class="muted">正在检查Hiyori窗口…</p>
@@ -53,6 +61,7 @@ body{max-width:960px;margin:32px auto;padding:0 24px;background:#f5f8fc;color:#2
 <label>本次任务可用文件夹（多选；不选仅使用产物目录）<select id="work-roots" multiple size="3"></select></label>
 <label>本次使用的技能（最多 3 个）<select id="work-skills" multiple size="3"></select></label>
 <textarea id="work-request" maxlength="8000" placeholder="例如：读取 D:\我的资料\项目A 的两份文档，整理成总结.docx 和对比表.xlsx，保留出处。修改任务时，在暂停后填写新的完整要求。"></textarea><button id="work-submit" class="primary">提交后台工作</button>
+<details><summary>文件验收条件（可选）</summary><p>指定目标文件和需要核对的文字。正文检查支持文本和 DOCX，不判断内容语义或排版。留空仅核验执行记录，仍需人工复核。修改任务时，留空保留原条件，填写则替换原条件。</p><label>目标文件 <input id="work-acceptance-path" maxlength="2000" placeholder="总结.docx；相对路径使用任务产物目录"></label><label>必须包含的文字（每行一项，最多 8 项）<textarea id="work-acceptance-contains" maxlength="16000" placeholder="项目结论"></textarea></label><label>不能包含的文字（每行一项，最多 8 项）<textarea id="work-acceptance-not-contains" maxlength="16000" placeholder="待补充"></textarea></label><label>预期 SHA256（可选）<input id="work-acceptance-sha" maxlength="64" placeholder="用于核对已知文件的内容哈希"></label><label><input id="work-acceptance-clear" type="checkbox">修改任务时清除已有验收条件</label></details>
 <p id="work-message" role="status"></p><label>选择工作任务 <select id="work-select"></select></label>
 <div><button id="work-progress">刷新进度</button><button id="work-pause">暂停</button><button id="work-modify">保存完整新要求</button><button id="work-resume">继续</button><button id="work-cancel">取消</button></div>
 <label><input type="checkbox" id="work-reviewed">恢复前已核对发生变化的文件或中断动作，接受从当前状态继续</label><pre id="work-state"></pre><div id="work-downloads"></div>

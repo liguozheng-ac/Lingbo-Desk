@@ -24,13 +24,58 @@ def edit_docx(source, output, options):
     with ZipFile(source) as original:
         root = etree.fromstring(original.read('word/document.xml'), etree.XMLParser(resolve_entities=False, no_network=True))
         paragraphs = root.xpath('//w:p', namespaces=ns)
+        qualified = lambda name: '{' + ns['w'] + '}' + name
+        protected = {qualified(name) for name in ('drawing', 'pict', 'object', 'txbxContent', 'fldSimple', 'sdt', 'ins', 'del', 'moveFrom', 'moveTo')}
+        for element in root.iter():
+            if element.tag in protected and old in ''.join(element.xpath('.//w:t/text()', namespaces=ns)):
+                raise ValueError('待修改文字位于文本框、字段、修订或内容控件，暂不支持安全替换；原件未改')
         before_structure = [len(root.xpath('//w:' + tag, namespaces=ns)) for tag in ('p', 'tbl', 'tr', 'tc', 'r')]
         matches = []
+        field_depth, field_text = 0, []
         for paragraph in paragraphs:
-            nodes = paragraph.xpath('.//w:t', namespaces=ns)
-            text = ''.join(node.text or '' for node in nodes)
-            positions = list(re.finditer(re.escape(old), text))
-            matches.extend((nodes, position.start(), position.end()) for position in positions)
+            if any(parent.tag in protected for parent in paragraph.iterancestors()):
+                continue
+            segments, current = [], []
+
+            def flush():
+                if current:
+                    segments.append(current.copy())
+                    current.clear()
+
+            def walk(element):
+                nonlocal field_depth, field_text
+                if element is not paragraph and element.tag == qualified('p'):
+                    flush(); return
+                if element.tag in protected or element.tag in {qualified(name) for name in ('tab', 'br', 'cr')}:
+                    flush(); return
+                if element.tag == qualified('fldChar'):
+                    flush()
+                    kind = element.get(qualified('fldCharType'))
+                    if kind == 'begin':
+                        field_depth += 1
+                    elif kind == 'end':
+                        if old in ''.join(field_text):
+                            raise ValueError('待修改文字位于动态字段，暂不支持安全替换；原件未改')
+                        field_depth = max(0, field_depth - 1)
+                        if not field_depth:
+                            field_text = []
+                    return
+                if element.tag == qualified('t'):
+                    if field_depth:
+                        field_text.append(element.text or '')
+                    else:
+                        current.append(element)
+                    return
+                for child in element:
+                    walk(child)
+
+            walk(paragraph); flush()
+            for nodes in segments:
+                text = ''.join(node.text or '' for node in nodes)
+                positions = list(re.finditer(re.escape(old), text))
+                matches.extend((nodes, position.start(), position.end()) for position in positions)
+        if field_depth:
+            raise ValueError('文档含未闭合字段，暂不支持安全替换；原件未改')
         if not matches or (len(matches) > 1 and not options.get('replace_all')):
             raise ValueError('原文不存在或有多处匹配；请补充上下文或明确全部替换')
         for nodes, start, end in reversed(matches):
@@ -50,7 +95,7 @@ def edit_docx(source, output, options):
         with ZipFile(output, 'w') as result:
             for info in original.infolist():
                 result.writestr(info, etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone=True) if info.filename == 'word/document.xml' else original.read(info.filename))
-    return {'replacements': len(matches), 'structureUnchanged': True}
+    return {'replacements': len(matches), 'structureUnchanged': True, 'scope': 'body_paragraphs_tables', 'limitation': '保留原有 ZIP 其他部件，不修改页眉页脚；涉及文本框、字段、修订和内容控件的目标会拒绝，不证明视觉排版完全一致'}
 
 
 def safe_cell(value):

@@ -130,7 +130,7 @@ test('a read receipt cannot finish an edit request, and model tools cannot appro
   const job = { schema: 1, id, output, sessionId: 'owner', request: '修改文件标点', status: 'running', version: 2, attempts: 2, rootIds: [], receipts: [{ ok: true, tool: 'work_read', attempt: 2 }], controller: new AbortController(), ticket: 'fixture', createdAt: new Date().toISOString() }; service.jobs.set(id, job);
   let response = await service.execute({ taskId: id, ticket: 'fixture', tool: 'work_finish', args: { outcome: 'complete', summary: 'done' } });
   assert.equal(response.ok, false); assert.match(response.error, /没有成功的动作回执/); assert.equal(job.finish, undefined);
-  for (const request of ['Replace punctuation in the document', '文書の句読点を置換して']) {
+  for (const request of ['调整文档标点符号', 'Replace punctuation in the document', 'Adjust punctuation in the document', '文書の句読点を置換して']) {
     job.request = request;
     const reply = await service.execute({ taskId: id, ticket: 'fixture', tool: 'work_finish', args: { outcome: 'complete', summary: 'done' } });
     assert.equal(reply.ok, false); assert.match(reply.error, /没有成功的动作回执/);

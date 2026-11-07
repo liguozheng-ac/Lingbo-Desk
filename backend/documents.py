@@ -157,13 +157,20 @@ def export(source, output, manifest=None, audit=None):
 
 if __name__ == '__main__':
     operation, source, output = sys.argv[1:4]
-    if operation == 'extract':
+    if operation in ('extract', 'extract-window', 'extract-check'):
         text = extract(Path(source))
         if not text.strip():
             raise ValueError('未提取到可用正文')
-        if len(text) > 60000:
-            raise ValueError('单份资料正文超过 60000 字符')
-        Path(output).write_text(json.dumps({'text': text}, ensure_ascii=False), encoding='utf-8')
+        maximum = 60000 if operation == 'extract' else 1000000
+        if len(text) > maximum:
+            raise ValueError(f'单份资料正文超过 {maximum} 字符')
+        value = {'text': text}
+        if operation == 'extract-window':
+            offset, limit = map(int, sys.argv[4:6])
+            if not 0 <= offset <= len(text) or not 1 <= limit <= 20000:
+                raise ValueError('读取范围无效')
+            value = {'text': text[offset:offset + limit], 'offset': offset, 'totalCharacters': len(text), 'truncated': offset > 0 or offset + limit < len(text)}
+        Path(output).write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')
     elif operation == 'export':
         export(Path(source), Path(output), sys.argv[4] if len(sys.argv) > 4 else None, sys.argv[5] if len(sys.argv) > 5 else None)
     else:

@@ -1,6 +1,7 @@
 import { request } from './client-api.mjs';
 import { personalPanel } from './personal-dashboard.mjs';
 import { workPanel } from './work-dashboard.mjs';
+import { servicePanel } from './service-dashboard.mjs';
 
 const byId = id => document.getElementById(id);
 let token;
@@ -21,6 +22,7 @@ const terminal = new Set(['completed', 'cancelled', 'failed', 'interrupted']);
 const owner = () => latest?.sessionId || activeLingboSessionId;
 const api = (url, data, options = {}) => request(url, { token, owner: owner(), data, ...options });
 const personal = personalPanel(api);
+const services = servicePanel(api);
 const work = workPanel(api, () => activeLingboSessionId);
 let personalLoaded = false;
 
@@ -60,7 +62,7 @@ async function refresh() {
     byId('task-select').replaceChildren(...jobs.map(job => new Option(`${labels[job.status] || job.status} · ${job.kind === 'web' ? '网页报告' : job.sourceId ? '资料报告' : '测试报告'} · ${job.id.slice(-8)}`, job.id)));
     byId('task-select').value = jobs.some(job => job.id === selectedId) ? selectedId : jobs.findLast(job => !terminal.has(job.status))?.id || jobs.at(-1)?.id || '';
     byId('status').textContent = `本机连接正常 · ${status.model?.name || '模型'} ${status.llm ? '已配置' : '未配置'} · ASR ${status.asr ? '就绪' : '未配置'} · TTS ${status.tts ? '就绪' : '未配置'}${status.settingsWarning ? `\n${status.settingsWarning}` : ''}${status.taskWarnings?.length ? '\n' + status.taskWarnings.join('\n') : ''}`;
-    if (!personalLoaded) { await personal.refresh(); personalLoaded = true; }
+    if (!personalLoaded) { await personal.refresh(); await services.refresh(); personalLoaded = true; }
     await work.refresh();
     byId('desktop-state').textContent = status.lingboConnected ? 'Hiyori窗口已连接。语音输入请使用角色旁的麦克风按钮。' : '尚未收到Hiyori窗口连接。请启动“聆泊”；此网页的文字与任务功能可单独使用。';
     if (!changingLanguage && document.activeElement !== byId('language')) byId('language').value = status.language;

@@ -2,26 +2,23 @@
 // It does not claim arbitrary tool rollback, process-crash recovery or remote exactly-once effects.
 import fs from 'node:fs';
 import path from 'node:path';
-import { fork } from 'node:child_process';
 import { root, upstream, initializeData, fixtures, waitUntil, sleep } from './shared.mjs';
+import { startWorker } from './worker-process.mjs';
 
 export class WorkerClient {
   constructor(directory, record = () => {}, options = {}) {
     initializeData(directory); fixtures(directory);
     this.directory = directory;
     this.events = [];
-    this.child = fork(path.join(root, 'worker.mjs'), [], {
-      cwd: upstream, env: { ...process.env, ...options.env, VALIDATION_DATA: directory, VALIDATION_MAX_TOKENS: String(options.maxTokens || 1600) },
-      stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true,
+    this.runtime = startWorker(options.workerFile || path.join(root, 'worker.mjs'), { ...options.processOptions,
+      cwd: upstream, diagnosticsDirectory: options.diagnosticsDirectory || path.join(directory, 'diagnostics'),
+      env: { ...options.env, VALIDATION_DATA: directory, VALIDATION_MAX_TOKENS: String(options.maxTokens || 1600) },
     });
-    const log = fs.createWriteStream(path.join(directory, 'runtime.log'));
-    this.child.stdout.pipe(log, { end: false });
-    this.child.stderr.pipe(log, { end: false });
+    this.child = this.runtime.child;
     this.child.on('message', event => { this.events.push(event); record(event); });
-    this.child.on('exit', (code, signal) => { this.exit = { code, signal }; log.end(); });
-    this.child.on('error', error => { this.exit = { error: error.message }; });
+    this.runtime.done.then(exit => { this.exit = exit; });
   }
-  send(command, fields = {}) { this.child.send({ command, ...fields }); }
+  send(command, fields = {}) { return this.runtime.send(command, fields); }
   async wait(type, predicate = () => true, after = 0, timeout = 90000) {
     let found;
     await waitUntil(() => {
@@ -34,9 +31,7 @@ export class WorkerClient {
     return found;
   }
   async close() {
-    if (this.exit) return;
-    this.send('shutdown');
-    try { await waitUntil(() => this.exit, 5000); } catch { this.child.kill(); }
+    const exit = await this.runtime.stop(); this.exit = exit;
   }
 }
 

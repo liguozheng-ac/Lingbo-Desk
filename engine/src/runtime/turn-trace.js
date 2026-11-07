@@ -15,6 +15,7 @@
 import fs from 'fs'
 import path from 'path'
 import { paths } from '../paths.js'
+import { metadataOnlyDiagnostics } from './diagnostic-privacy.js'
 
 const MAX_TURNS = 80                       // 内存里保留的最近 turn 数
 const FILE_MAX_BYTES = 12 * 1024 * 1024   // JSONL 落盘文件上限，超过就用当前环形缓冲重写
@@ -197,7 +198,7 @@ const NULL_HANDLE = {
 
 // 开启一个 turn 的追踪。返回 handle，callLLM 用它逐轮记录、结束时收尾。
 export function beginTurn(meta) {
-  if (!enabled) return NULL_HANDLE
+  if (!enabled || metadataOnlyDiagnostics()) return NULL_HANDLE
   ensureLoaded()
   try {
     const t = {

@@ -7,6 +7,7 @@ import { ASSET_REF_PREFIX } from '@lingbo/server-sdk'
 import { decodeBase64, encodeBase64 } from '@moeru/std/base64'
 
 import { chatAssetsRepo } from '../database/repos/chat-assets.repo'
+import { parseChatAssetReference } from './chat-asset-reference'
 
 /** A message part holds `lingbo-asset:<id>` in place of its bytes. The ID is the SHA-256 of the bytes. */
 export function chatAssetRef(id: string) {
@@ -15,7 +16,7 @@ export function chatAssetRef(id: string) {
 
 /** Returns the asset ID of a reference, or nothing for any other value, such as base64 or a data URL. */
 export function chatAssetIdFrom(value: string) {
-  return value.startsWith(ASSET_REF_PREFIX) ? value.slice(ASSET_REF_PREFIX.length) : undefined
+  return parseChatAssetReference(value, ASSET_REF_PREFIX)?.id
 }
 
 /** The largest image or recording that a chat stores or sends to a module. */
@@ -44,8 +45,12 @@ export async function storeChatAsset(bytes: Uint8Array, mimeType: string, owner:
 
 /** Reads the asset of a reference. A missing asset throws, because the message cannot be rendered without it. */
 export async function readChatAsset(ref: string) {
-  const id = chatAssetIdFrom(ref)
-  const record = id ? await chatAssetsRepo.get(id) : null
+  const reference = parseChatAssetReference(ref, ASSET_REF_PREFIX)
+  const record = reference
+    ? reference.legacyNamespace
+      ? await chatAssetsRepo.getHistorical(reference.id, reference.legacyNamespace)
+      : await chatAssetsRepo.get(reference.id)
+    : null
   if (!record)
     throw new Error(`Chat asset is missing: ${ref}`)
   return record

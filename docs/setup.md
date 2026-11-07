@@ -11,6 +11,8 @@
 
 在仓库根目录运行 README 中的三个 pnpm 安装命令，然后创建 Python 虚拟环境并安装 `requirements.txt`。
 
+Windows x64 / CPython 3.12 若要使用便携包验证过的完整版本集合，可改用 `python -m pip install --require-hashes --only-binary=:all: -r requirements-windows.lock`。便携打包脚本强制使用该锁；其他平台需要各自生成适用的轮子锁。
+
 引擎使用 `better-sqlite3`。如果包管理器提示跳过原生构建，检查该模块的安装脚本后，在引擎目录为该模块启用并重新运行构建。不要把另一台机器的原生二进制提交进仓库。
 
 ```powershell
@@ -21,8 +23,11 @@ pnpm --dir engine rebuild better-sqlite3
 
 ## 服务配置
 
-复制 `.env.example` 为 `.env`，填写自己的 DeepSeek、阿里云识别与豆包合成凭据。
-后端使用 Node 的环境文件入口读取配置，不依赖任何代码助手的私有凭据目录。
+后端无需密钥即可启动。Windows 用户打开工作台的“首次使用与服务配置”，填写所需 DeepSeek、阿里云 ASR 与豆包 TTS 密钥，点击“加密保存到本机”，再分别检查连接。新配置保存在个人数据目录的 `.local/services.dpapi`，使用 Windows CurrentUser DPAPI 加密，界面不回显密钥。
+
+仅使用 Ollama 时无需 DeepSeek 密钥；先在“模型选择”验证并切换到本地模型。语音仍需独立配置 ASR/TTS。连接检查会使用正常 API 用量，不等于任务或语音准确率验收。
+
+也可复制 `.env.example` 为 `.env` 使用环境变量配置。旧配置继续兼容，不会自动迁移或删除；界面新保存的字段优先，明确清除会禁止该字段回退到旧配置。后端不依赖任何代码助手的私有凭据目录。
 
 语音的高级配置可通过 `LINGBO_SPEECH_CONFIG` 指向个人 JSON 文件。格式如下，示例不含有效凭据：
 
@@ -41,6 +46,10 @@ pnpm --dir engine rebuild better-sqlite3
 默认运行数据保存在根目录 `.local/workspace`，可通过 `VOICE_AGENT_WORKSPACE` 指向其他个人目录。
 
 如果系统中有多个 Python，通过 `VOICE_PYTHON` 指向对应虚拟环境的 Python。
+
+`node --test backend/test/*.test.mjs` 包含实际启动网关的配置集成测试，需要先安装引擎和语音依赖；文档/音频检查还需要具备相应模块的 Python。最新验证与真实服务评测见 [首次配置与评测记录](service-onboarding-and-real-evaluation.md)。
+
+长文档范围读取、DOCX 精确修改和任务恢复的后续验证见 [长文档与恢复专项](long-documents-and-recovery.md)。
 
 ## 准备桌面
 
@@ -71,16 +80,6 @@ your-assets/
 
 本机网关连接凭据由后端首次启动生成，保存在运行目录 `.local/gateway-token`。它不是云服务 API Key，仅在本人本机配置中使用。
 
-当前目录交付面向源码审阅和开发构建。已有安装版的自动升级、数据迁移脚本及其历史记录不在此仓库收录范围内。
+可按[Windows 独立测试包](windows-test-package.md)装配本地便携测试版。测试版默认使用单独的数据目录和端口；不读取旧开发目录的迁移输入，不包含个人凭据。正式安装器、自动升级和跨版本数据迁移仍需单独验收。
 
-## 首次 Git 提交
-
-本地仓库已经初始化，未配置远程地址。若本机尚无 Git 作者身份，请先填写自己的身份再提交：
-
-```powershell
-git config user.name "Your Name"
-git config user.email "you@example.com"
-git commit -m "Initial source release"
-```
-
-示例身份需要由本人替换。这里只设置当前仓库，不修改全局 Git 配置。
+测试包的使用、构建输入和实际验证边界见上述说明。不要将填有凭据的个人环境文件提交到仓库。

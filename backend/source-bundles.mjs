@@ -10,6 +10,7 @@ import { digest, fileDigest } from './task-store.mjs';
 const execute = promisify(execFile);
 const script = fileURLToPath(new URL('./documents.py', import.meta.url));
 import { python } from './python-runtime.mjs';
+import { documentEnvironment } from '../runtime/worker-environment.mjs';
 export { python };
 export const supported = new Set(['.md', '.txt', '.docx', '.pdf']);
 
@@ -40,7 +41,7 @@ export class SourceBundles {
       const extracted = path.join(directory, `${index + 1}.json`);
       const bytes = Buffer.from(await files[index].arrayBuffer());
       fs.writeFileSync(input, bytes, { flag: 'wx' });
-      try { await execute(python, [script, 'extract', input, extracted], { windowsHide: true, timeout: 30000, maxBuffer: 8192, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }); }
+      try { await execute(python, [script, 'extract', input, extracted], { windowsHide: true, timeout: 30000, maxBuffer: 8192, env: documentEnvironment() }); }
       catch (error) { throw new Error(`无法读取 ${name}：${String(error.stderr || error.message).split('\n').filter(Boolean).at(-1).slice(0, 250)}`); }
       const { text } = JSON.parse(fs.readFileSync(extracted, 'utf8'));
       const source = `S${index + 1}`;
@@ -114,7 +115,7 @@ export class SourceBundles {
 export async function exportWord(input, output, signal, manifest, audit) {
   const temporary = output + '.tmp';
   try {
-    await execute(python, [script, 'export', input, temporary, ...(manifest ? [manifest] : []), ...(audit ? [audit] : [])], { windowsHide: true, timeout: 30000, signal, maxBuffer: 8192, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+    await execute(python, [script, 'export', input, temporary, ...(manifest ? [manifest] : []), ...(audit ? [audit] : [])], { windowsHide: true, timeout: 30000, signal, maxBuffer: 8192, env: documentEnvironment() });
     signal?.throwIfAborted();
     fs.renameSync(temporary, output);
   } finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }

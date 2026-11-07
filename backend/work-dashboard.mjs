@@ -4,6 +4,16 @@ const labels = { starting: '准备中', running: '运行中', awaiting_approval:
 export function workPanel(api, activeSession) {
   let state, selected, polling = false;
   const message = value => { el('work-message').textContent = value; };
+  const acceptance = () => {
+    const path = el('work-acceptance-path').value.trim(), sha256 = el('work-acceptance-sha').value.trim();
+    const lines = id => el(id).value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const contains = lines('work-acceptance-contains'), notContains = lines('work-acceptance-not-contains');
+    const filled = path || sha256 || contains.length || notContains.length;
+    if (el('work-acceptance-clear').checked) { if (filled) throw new Error('清除旧条件时请留空新条件'); return []; }
+    if (!filled) return undefined;
+    if (!path) throw new Error('请填写验收的目标文件');
+    return [{ path, contains, notContains, ...(sha256 ? { sha256 } : {}) }];
+  };
   async function refresh() {
     if (polling) return; polling = true;
     try {
@@ -25,6 +35,7 @@ export function workPanel(api, activeSession) {
   function render() {
     selected = state?.jobs.find(j => j.id === el('work-select').value);
     el('work-state').textContent = selected ? `${labels[selected.status]} · 版本 ${selected.version} · 执行 ${selected.attempts} 次\n${selected.request}\n产物文件夹：${selected.output}\n${selected.error || ''}\n${selected.result || ''}` : '暂无工作任务。可在此输入，或直接对 Hiyori 说出工作要求。';
+    if (selected) el('work-state').textContent += `\n工具调用：${selected.toolCalls}/${selected.toolCallLimit}\n验收：${selected.verification ? selected.verification.limitation : '尚无验收结果'}\n固定条件：${JSON.stringify(selected.acceptance || [])}`;
     el('work-receipts').textContent = selected ? JSON.stringify(selected.receipts, null, 2) : '';
     el('work-approval').textContent = selected?.approval ? JSON.stringify(selected.approval, null, 2) : '暂无待确认动作。';
     for (const id of ['work-approve', 'work-reject']) el(id).disabled = !selected?.approval;
@@ -34,19 +45,23 @@ export function workPanel(api, activeSession) {
     }));
   }
   async function act(fn) { try { await fn(); } catch (error) { message(error.message); } finally { await refresh(); } }
-  el('work-select').onchange = () => { el('work-reviewed').checked = false; render(); };
+  el('work-select').onchange = () => {
+    el('work-reviewed').checked = false;
+    for (const id of ['path', 'sha', 'contains', 'not-contains']) el('work-acceptance-' + id).value = '';
+    el('work-acceptance-clear').checked = false; render();
+  };
   el('work-grant').onclick = () => act(async () => {
     const directory = el('work-directory').value.trim(), mode = el('work-mode').value;
     if (!window.confirm(`授权 ${mode === 'write' ? '读写' : '只读'}：${directory}\n使用云端模型时，读到的正文会发送给该服务。语音新任务可使用已授权文件夹。是否继续？`)) return;
     await api('/work/permissions', { action: 'grant', directory, mode, revision: state.permissions.revision }); message('已授权指定文件夹。');
   });
   el('work-submit').onclick = () => act(async () => {
-    const result = await api('/work/submit', { request: el('work-request').value, rootIds: [...el('work-roots').selectedOptions].map(o => o.value), skillIds: [...el('work-skills').selectedOptions].map(o => o.value) }, { owner: activeSession(), requestId: crypto.randomUUID() });
+    const result = await api('/work/submit', { request: el('work-request').value, acceptance: acceptance() || [], rootIds: [...el('work-roots').selectedOptions].map(o => o.value), skillIds: [...el('work-skills').selectedOptions].map(o => o.value) }, { owner: activeSession(), requestId: crypto.randomUUID() });
     el('work-select').add(new Option(result.task.id, result.task.id)); el('work-select').value = result.task.id; message(result.content);
   });
   for (const action of ['progress', 'pause', 'resume', 'cancel', 'modify']) el('work-' + action).onclick = () => act(async () => {
     if (!selected) throw new Error('请先选择工作任务');
-    await api('/work/control', { taskId: selected.id, action, version: selected.version, ...(action === 'modify' ? { request: el('work-request').value } : {}), ...(action === 'resume' ? { reviewed: el('work-reviewed').checked } : {}) }, { owner: selected.sessionId }); message('任务状态已更新。');
+    await api('/work/control', { taskId: selected.id, action, version: selected.version, ...(action === 'modify' ? { request: el('work-request').value, acceptance: acceptance() } : {}), ...(action === 'resume' ? { reviewed: el('work-reviewed').checked } : {}) }, { owner: selected.sessionId }); message('任务状态已更新。');
   });
   for (const [id, approved] of [['work-approve', true], ['work-reject', false]]) el(id).onclick = () => act(async () => {
     if (!selected?.approval) throw new Error('没有待确认动作');

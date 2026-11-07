@@ -128,6 +128,7 @@ export class ReportTaskService {
     throw new Error('输入或检查点缺失、被改动，且没有其他校验一致的副本');
   }
   recoveryPlan(job) {
+    if (job.worker && !job.worker.exit && ['interrupted', 'failed'].includes(job.status)) return { canResume: false, reason: '执行器尚未完全关闭，不能启动新一次执行。' };
     if (!['interrupted', 'failed'].includes(job.status)) return { canResume: false, reason: job.status === 'completed' ? '任务已完成。' : job.status === 'cancelled' ? '任务已取消，可另建任务。' : '运行中的任务使用当前暂停与继续控制。' };
     if (job.legacy) return { canResume: false, reason: '旧版任务缺少执行时记录的检查点，请重新创建任务；历史产物仍可查看。' };
     try {
@@ -152,7 +153,7 @@ export class ReportTaskService {
   }
   ensureAvailable(except) {
     if (this.closing) throw new Error('任务服务正在停止，请稍后重试');
-    if ([...this.jobs.values()].some(job => job.id !== except && activeStates.has(job.status))) throw new Error('当前只允许一个工作任务，请先完成、暂停后取消或结束现有任务');
+    if ([...this.jobs.values()].some(job => job.id !== except && (activeStates.has(job.status) || (job.worker && !job.worker.exit)))) throw new Error('当前只允许一个工作任务，请先完成、暂停后取消或结束现有任务');
   }
   create(sessionId, key, options = {}) {
     if (!sessionId || !key) throw new Error('缺少会话或请求编号');
@@ -182,8 +183,9 @@ export class ReportTaskService {
     job.controller = new AbortController();
     this.persist(job);
     job.execution = this.run(job, previousWorkspace).catch(error => {
-      job.status = job.shutdownRequested ? 'interrupted' : job.cancelRequested ? 'cancelled' : 'failed';
-      job.error = job.shutdownRequested ? '服务已停止，可在检查通过后手动继续。' : job.cancelRequested ? null : error.message;
+      const cleanupPending = job.worker && !job.worker.exit;
+      job.status = cleanupPending || job.shutdownRequested ? 'interrupted' : job.cancelRequested ? 'cancelled' : 'failed';
+      job.error = cleanupPending ? '执行器尚未完全关闭，不能恢复任务或切换模型。' : job.shutdownRequested ? '服务已停止，可在检查通过后手动继续。' : job.cancelRequested ? null : error.message;
       this.persist(job);
     });
   }
@@ -240,6 +242,7 @@ export class ReportTaskService {
       if (event.type === 'tool.result') { job.evidence.push({ tool: event.data.name, path: event.data.path, ok: event.data.ok !== false, requestId: event.data.request?.id, at: event.at, attempt }); this.persist(job); }
     }, { maxTokens: job.sourceId || job.modelProfile === 'ollama' ? 5000 : 1600, ...this.workerOptions?.(job) });
     job.worker = worker;
+    let finishedNormally = false;
     try {
       if (job.kind === 'web' && !job.completed.includes('fetch')) await this.collectWeb(job);
       if (job.cancelRequested || job.shutdownRequested) return;
@@ -291,16 +294,14 @@ export class ReportTaskService {
         job.evidence.push({ tool: 'local_docx_export', path: 'report.docx', at: Date.now(), attempt });
         this.checkpoint(job, 'export');
       }
-      job.status = job.shutdownRequested ? 'interrupted' : job.cancelRequested ? 'cancelled' : 'completed';
-      if (job.status === 'completed') job.current = null;
-      this.persist(job);
+      finishedNormally = true;
     } finally {
       clearTimeout(job.releaseTimer);
       await worker.close();
       if (job.worker === worker) delete job.worker;
       if (job.cancelRequested || job.shutdownRequested) {
         job.status = job.shutdownRequested ? 'interrupted' : 'cancelled'; this.persist(job);
-      }
+      } else if (finishedNormally) { job.status = 'completed'; job.current = null; this.persist(job); }
     }
   }
   pause(job) {
@@ -330,6 +331,7 @@ export class ReportTaskService {
     job.cancelRequested = true; job.controller?.abort();
     job.status = job.worker ? 'cancel_requested' : 'cancelled'; this.persist(job);
     if (job.worker && !job.worker.exit) job.worker.send('cancel');
+    if (job.worker && !job.worker.exit) void job.worker.close().catch(() => { job.error = '执行器尚未完全关闭，请核对任务状态'; });
   }
   artifact(job, name) {
     if (job.status !== 'completed' || !this.snapshot(job.id).artifacts.includes(name)) throw new Error('产物当前不可读取');

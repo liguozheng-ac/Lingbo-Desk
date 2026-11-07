@@ -1,4 +1,5 @@
 import localforage from 'localforage'
+import { readHistoricalChatAsset } from '../../libs/chat-asset-reference'
 
 /** One stored asset. `owners` lists the chat sessions whose messages reference it. */
 export interface ChatAssetRecord {
@@ -28,6 +29,16 @@ const WRITE_LOCK = 'lingbo:chat-assets-write'
 export const chatAssetsRepo = {
   async get(id: string) {
     return assets().getItem<ChatAssetRecord>(id)
+  },
+
+  /** Preserve historical bytes and owner lists; never migrate during a read. */
+  async getHistorical(id: string, namespace: string): Promise<ChatAssetRecord | null> {
+    const record = await readHistoricalChatAsset(id, namespace) as ChatAssetRecord | null
+    if (!record)
+      return null
+    if (!(record.blob instanceof Blob) || typeof record.mimeType !== 'string' || !Array.isArray(record.owners))
+      throw new Error('Historical chat asset has an invalid record')
+    return record
   },
 
   /** Stores the bytes once and adds `owner`. Storing the same bytes again only adds the owner. */

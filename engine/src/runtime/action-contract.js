@@ -4,10 +4,7 @@
 // annoying tool loop.  Add a contract only when the wording clearly asks the
 // agent to change state or retrieve fresh external/local evidence.
 
-import {
-  isExplicitBrowserDisplayModeRequest,
-  isSystemBrowserRequest,
-} from '../mcp/browser-display.js'
+import { isExplicitBrowserDisplayModeRequest, isSystemBrowserRequest } from '../mcp/browser-display.js'
 import { isFileEditFollowup } from './file-edit-followup-intent.js'
 import { classifyBrowserScreenshotIntent } from './browser-screenshot-intent.js'
 import { explicitlyKeepsBrowserOpen } from './browser-intent-guards.js'
@@ -567,8 +564,7 @@ function classifyDirectBrowserAction(text = '', { browserContinuity = false } = 
   const directUrl = extractDirectBrowserUrl(value)
   if (directUrl
       && !isSystemBrowserRequest(value)
-      && !isExplicitBrowserDisplayModeRequest(value)
-      && /^(?:请\s*|帮我\s*)*(?:打开|访问|进入|前往|加载)\s+/i.test(value)) {
+      && /^(?:请\s*|帮我\s*)*(?:用(?:你的)?浏览器\s*)?(?:打开|访问|进入|前往|加载)\s+/i.test(value)) {
     return {
       ...base,
       id: 'browser_open_url',
@@ -1056,6 +1052,9 @@ function browserScreenshotCompletionIssue(text = '', options = {}) {
 }
 
 export function actionContractCompletionIssue(contract, text = '', options = {}) {
+  if (contract?.id === 'system_browser_open' && /(?:默认浏览器|小窗和大窗共享|小窗口和大窗口共享|三个浏览器各自独立|default browser|(?:已|已经|在|使用).{0,12}(?:Safari|Firefox|Edge))/i.test(text)) {
+    return 'This tool uses the selected Chrome Agent Window, not the default browser or a removed card/window presentation; do not name Safari or claim independent legacy browser profiles.'
+  }
   if (contract?.id === 'browser_screenshot') {
     return browserScreenshotCompletionIssue(text, options)
   }

@@ -3,6 +3,9 @@ import { useChatSessionStore } from '@lingbo/stage-ui/stores/chat/session-store'
 import { useProviderConfigStore } from '@lingbo/stage-ui/stores/providers/config'
 import { useLlmToolsStore } from '@lingbo/stage-ui/stores/ai/chat-llm/tools'
 import { useMemoryStore } from '@lingbo/stage-ui/stores/memory'
+import { useConsciousnessStore } from '@lingbo/stage-ui/stores/modules/consciousness'
+import { useHearingStore } from '@lingbo/stage-ui/stores/modules/hearing'
+import { useSpeechStore } from '@lingbo/stage-ui/stores/modules/speech'
 import { getActivePinia } from 'pinia'
 import { toast } from 'vue-sonner'
 
@@ -19,19 +22,38 @@ async function start() {
   let pinia
   for (let attempt = 0; attempt < 300; attempt++) {
     pinia = getActivePinia()
-    if (pinia?._s.has('chat') && pinia._s.has('chat-session'))
+    if (pinia?._a)
       break
     await new Promise(resolve => setTimeout(resolve, 100))
   }
-  if (!pinia?._s.has('chat-session'))
+  if (!pinia?._a)
     throw new Error('LINGBO stores did not become ready')
   const chat = useChatStore(pinia)
   const sessions = useChatSessionStore(pinia)
   const providers = useProviderConfigStore(pinia)
+  const runtimeOrigin = window.__lingboRuntime?.gatewayOrigin
+  const origin = runtimeOrigin || 'http://127.0.0.1:3850'
+  const originURL = new URL(origin)
+  if (originURL.protocol !== 'http:' || originURL.hostname !== '127.0.0.1' || originURL.origin !== origin)
+    throw new Error('Invalid local gateway origin')
+  if (runtimeOrigin) {
+    const bootstrap = await fetch('/local-gateway-bootstrap').then(response => { if (!response.ok) throw new Error('Local gateway bootstrap failed'); return response.json() })
+    if (bootstrap.baseURL !== origin + '/v1/' || !/^[a-f0-9]{64}$/.test(bootstrap.token))
+      throw new Error('Invalid local gateway bootstrap')
+    for (const [id, extra] of [['openai-compatible', {}], ['openai-compatible-audio-transcription', { model: 'local-paraformer' }], ['openai-compatible-audio-speech', { model: 'local-doubao-tts', voice: 'local-vivi' }]]) {
+      if (providers.getProviderConfig(id)?.baseUrl)
+        continue
+      providers.ensureProvider(id, id)
+      await providers.updateProviderConfig(id, { baseUrl: bootstrap.baseURL, apiKey: bootstrap.token, ...extra }, 'configured')
+    }
+    const consciousness = useConsciousnessStore(pinia), hearing = useHearingStore(pinia), speech = useSpeechStore(pinia)
+    if (!consciousness.activeProvider) { consciousness.activeProvider = 'openai-compatible'; consciousness.activeModel = 'voice-agent-default' }
+    if (!hearing.activeTranscriptionProvider) { hearing.activeTranscriptionProvider = 'openai-compatible-audio-transcription'; hearing.activeTranscriptionModel = 'local-paraformer' }
+    if (!speech.activeSpeechProvider || speech.activeSpeechProvider === 'speech-noop') { speech.activeSpeechProvider = 'openai-compatible-audio-speech'; speech.activeSpeechModel = 'local-doubao-tts'; speech.activeSpeechVoiceId = 'local-vivi' }
+  }
   const config = providers.getProviderConfig('openai-compatible')
-  if (!config?.baseUrl || new URL(config.baseUrl).origin !== 'http://127.0.0.1:3850')
+  if (!config?.baseUrl || new URL(config.baseUrl).origin !== origin)
     return
-  const origin = 'http://127.0.0.1:3850'
   const headers = { 'Authorization': `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' }
   const lifetime = new AbortController()
   const originalFetch = window.fetch.bind(window)

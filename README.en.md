@@ -4,7 +4,13 @@
 
 A Windows desktop voice agent for continuous conversation, an animated character, and file, Office, and browser tasks that run while you chat.
 
-Current version: 0.3.0. A personal project validated on Windows x64.
+The installed release baseline is **0.3.0**. `main` includes subsequent Windows x64 development updates, with **0.3.4-test** as the portable test candidate.
+
+## Original Live2D character preview
+
+<img src="docs/media/lingbo-original-live2d.png" alt="Lingbo Desk original Live2D Character B" width="320" />
+
+Character B has assembled artwork, independent eyelid controls, and a basic mouth rig. The image is a native export of the **t008** Cubism model. The character is currently at the editor validation stage.
 
 ## Features
 
@@ -14,6 +20,13 @@ Current version: 0.3.0. A personal project validated on Windows x64.
 - File and Office document processing, plus a separate browser session.
 - Explicitly saved long-term memories, with Skills import and version management.
 - Switching between the DeepSeek cloud API and local Ollama models.
+
+## Recent development
+
+- Agent tool allowlists, execution budgets, and checks for task outputs. [Execution notes](docs/work-execution-hardening.md)
+- Windowed reads and precise edits for long Word documents, plus task recovery checks. [Verification notes](docs/long-documents-and-recovery.md)
+- A Windows portable test build, a pink app icon, service connection checks, and encrypted credential storage. [Packaging notes](docs/windows-test-package.md) · [Configuration and evaluation](docs/service-onboarding-and-real-evaluation.md)
+- Compatibility with older voice attachments was verified in a dedicated desktop candidate. Installed-app voice retesting is pending.
 
 ## Architecture
 

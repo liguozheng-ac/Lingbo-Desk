@@ -127,7 +127,7 @@ process.on('message', message => {
   } else if (message.command === 'snapshot') {
     emit('snapshot', { state: runtime.getStateSnapshot(), conversations: getDB().prepare('SELECT COUNT(*) AS count FROM conversations').get().count });
   } else if (message.command === 'shutdown') {
-    stopLoop(); closeDBForTest(); process.exit(0);
+    jobController.abort(); stopLoop(); closeDBForTest(); process.exit(0);
   }
 });
-process.on('disconnect', () => process.exit(0));
+process.on('disconnect', () => { jobController.abort(); stopLoop(); closeDBForTest(); process.exit(0); });

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { TextDecoder } from 'node:util';
 import { hashFile, sha, within, realTarget } from './work-policy.mjs';
 import { python } from './source-bundles.mjs';
+import { documentEnvironment } from '../runtime/worker-environment.mjs';
 const execute = promisify(execFile);
 const office = fileURLToPath(new URL('./work-office.py', import.meta.url));
 const documents = fileURLToPath(new URL('./documents.py', import.meta.url));
@@ -19,9 +20,27 @@ export class WorkTools {
   backup(job, file) { const directory = path.join(this.policy.file ? path.dirname(this.policy.file) : this.policy.directory, 'work-backups', job.id); fs.mkdirSync(directory, { recursive: true }); const backup = path.join(directory, crypto.randomUUID() + path.extname(file)); fs.copyFileSync(file, backup, fs.constants.COPYFILE_EXCL); if (hashFile(backup) !== hashFile(file)) throw new Error('备份校验失败'); return backup; }
   async helper(job, options, output) {
     const input = path.join(path.dirname(job.output), crypto.randomUUID() + '.json'); fs.writeFileSync(input, JSON.stringify(options));
-    try { const { stdout } = await execute(python, [office, input, output], { windowsHide: true, signal: job.controller.signal, timeout: 60000, maxBuffer: 512 * 1024 }); return JSON.parse(stdout.trim()); }
+    try { const { stdout } = await execute(python, [office, input, output], { windowsHide: true, signal: job.controller.signal, timeout: 60000, maxBuffer: 512 * 1024, env: documentEnvironment() }); return JSON.parse(stdout.trim()); }
     catch (error) { throw new Error(job.controller.signal.aborted ? '任务已停止' : String(error.stderr || error.message).split('\n').filter(Boolean).at(-1)); }
     finally { if (fs.existsSync(input)) fs.unlinkSync(input); }
+  }
+  async acceptanceText(job, target) {
+    this.resolve(job, target); this.checkSize(target);
+    const ext = path.extname(target).toLowerCase();
+    if (textExtensions.has(ext)) {
+      const bytes = fs.readFileSync(target); let text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { text = new TextDecoder('gb18030', { fatal: true }).decode(bytes); }
+      if (text.includes('\0') || text.length > 1000000) throw new Error('验收正文非文本或超过 1000000 字符，未截断验收');
+      return text;
+    }
+    if (ext !== '.docx') throw new Error('正文验收当前仅支持文本和 DOCX；其他格式可验证目标路径和 SHA256');
+    const temp = path.join(path.dirname(job.output), crypto.randomUUID() + '.json');
+    try {
+      await execute(python, [documents, 'extract-check', target, temp], { windowsHide: true, signal: job.controller.signal, timeout: 60000, maxBuffer: 512 * 1024, env: documentEnvironment() });
+      const value = JSON.parse(fs.readFileSync(temp, 'utf8'));
+      if (typeof value.text !== 'string') throw new Error('验收正文提取失败');
+      return value.text;
+    } finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
   }
   async execute(job, tool, args = {}, confirm, intent) {
     if (!args || typeof args !== 'object' || Array.isArray(args) || JSON.stringify(args).length > 150000) throw new Error('工具参数无效或过大');
@@ -34,23 +53,25 @@ export class WorkTools {
       value = { path: target, entries: entries.slice(0, 200).map(e => ({ name: e.name, directory: e.isDirectory(), link: e.isSymbolicLink() })), truncated: entries.length > 200 };
     } else if (tool === 'work_read') {
       this.checkSize(target); const before = hashFile(target); const ext = path.extname(target).toLowerCase();
+      const offset = args.offset ?? 0, max = job.modelProfile === 'ollama' ? 6000 : 20000, limit = Math.min(args.limit ?? max, max);
+      if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1) throw new Error('读取范围无效');
+      let windowed = false;
       if (textExtensions.has(ext)) {
         const bytes = fs.readFileSync(target); let content; try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { content = new TextDecoder('gb18030', { fatal: true }).decode(bytes); }
         if (content.includes('\0')) throw new Error('不是有效文本');
         value = { content };
       } else if (['.docx', '.pdf'].includes(ext)) {
         const temp = path.join(path.dirname(job.output), crypto.randomUUID() + '.json');
-        try { await execute(python, [documents, 'extract', target, temp], { windowsHide: true, signal, timeout: 60000 }); value = JSON.parse(fs.readFileSync(temp, 'utf8')); }
+        try { await execute(python, [documents, 'extract-window', target, temp, String(offset), String(limit)], { windowsHide: true, signal, timeout: 60000, env: documentEnvironment() }); value = JSON.parse(fs.readFileSync(temp, 'utf8')); windowed = true; }
         finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
       } else if (['.xlsx', '.pptx'].includes(ext)) value = await this.helper(job, { operation: 'read', source: target }, path.join(path.dirname(job.output), 'unused'));
       else throw new Error('不支持此文件格式');
-      const content = value.content ?? value.text ?? JSON.stringify(value), offset = args.offset ?? 0;
-      const max = job.modelProfile === 'ollama' ? 6000 : 20000, limit = Math.min(args.limit ?? max, max);
-      if (!Number.isInteger(offset) || offset < 0 || offset > content.length || !Number.isInteger(limit) || limit < 1) throw new Error('读取范围无效');
-      const selected = content.slice(offset, offset + limit), budget = job.modelProfile === 'ollama' ? 12000 : 50000;
+      const content = value.content ?? value.text ?? JSON.stringify(value);
+      if (!windowed && offset > content.length) throw new Error('读取范围无效');
+      const selected = windowed ? content : content.slice(offset, offset + limit), budget = job.modelProfile === 'ollama' ? 12000 : 50000;
       if ((job.readCharacters || 0) + selected.length > budget) throw new Error('本次执行的资料上下文达到上限。请缩小读取范围、暂停后分阶段继续，或改用资料报告入口；未发送更多正文。');
       job.readCharacters = (job.readCharacters || 0) + selected.length;
-      if (offset || content.length > limit || 'content' in value || 'text' in value) value = { content: selected, offset, totalCharacters: content.length, truncated: offset > 0 || offset + limit < content.length };
+      if (windowed || offset || content.length > limit || 'content' in value || 'text' in value) value = { content: selected, offset, totalCharacters: windowed ? value.totalCharacters : content.length, truncated: windowed ? value.truncated : offset > 0 || offset + limit < content.length };
       if (hashFile(target) !== before) throw new Error('读取期间文件发生变化，请重试');
       value = { ok: true, path: target, sha256: before, ...value }; evidence = { path: target, sha256: before };
     } else if (['work_write', 'work_edit', 'work_office'].includes(tool)) {

@@ -1,5 +1,6 @@
 import { getDB, closeDBForTest } from './db/connection.js'
 import { CANONICAL_USER_ID, normalizeConversationPartyId } from './db/utils.js'
+import { metadataOnlyDiagnostics } from './runtime/diagnostic-privacy.js'
 
 export { getDB, closeDBForTest }
 export { normalizeConversationPartyId }
@@ -1376,6 +1377,7 @@ export function insertActionLog({
   durationMs = 0,
   source = '',
 }) {
+  if (metadataOnlyDiagnostics()) return
   const db = getDB()
   const serializedArgs = argsJson ?? safeStringify(args ?? {})
   db.prepare(`

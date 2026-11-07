@@ -36,6 +36,6 @@ emit('ready', {});
 process.on('message', message => {
   if (message.command === 'run' && !started) { started = true; prompt = message.prompt; pushMessage('ID:000001', prompt, 'WEB', { clientId: 'hiyori-work', clientMessageId: process.env.WORK_TASK_ID }); }
   if (message.command === 'stop') controller.abort('User stopped task');
-  if (message.command === 'shutdown') { stopLoop(); process.exit(0); }
+  if (message.command === 'shutdown') { controller.abort(); stopLoop(); process.exit(0); }
 });
-process.on('disconnect', () => process.exit(0));
+process.on('disconnect', () => { controller.abort(); stopLoop(); process.exit(0); });

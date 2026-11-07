@@ -37,6 +37,7 @@ desktop/apps/stage-tamagotchi/src/renderer/bridges/lingbo-*.mjs
 desktop/apps/stage-tamagotchi/computer-use-runtime-patch.mjs
 desktop/apps/stage-tamagotchi/electron-integration.config.ts
 desktop/apps/stage-tamagotchi/package-bootstrap.mjs
+desktop/apps/stage-tamagotchi/package-settings.mjs
 desktop/apps/stage-tamagotchi/static-renderer.mjs
 desktop/apps/stage-tamagotchi/profile-migration.mjs
 

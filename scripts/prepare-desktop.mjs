@@ -9,7 +9,7 @@ const bridge=path.join(app,'src/renderer/bridges');fs.mkdirSync(bridge,{recursiv
 for(const [source,target] of Object.entries({'renderer-bridge.mjs':'lingbo-integration.mjs','renderer-voice.mjs':'lingbo-voice.mjs','commands.mjs':'lingbo-commands.mjs','speech-targets.mjs':'lingbo-speech-targets.mjs','work-schema.mjs':'lingbo-work-schema.mjs'}))fs.copyFileSync(path.join(desktop,'bridges',source),path.join(bridge,target));
 fs.copyFileSync(path.join(desktop,'bridges/computer-use-runtime-patch.mjs'),path.join(app,'computer-use-runtime-patch.mjs'));
 fs.copyFileSync(path.join(desktop,'bridges/desktop-config.ts.template'),path.join(app,'electron-integration.config.ts'));
-for(const name of ['package-bootstrap.mjs','static-renderer.mjs','profile-migration.mjs'])fs.copyFileSync(path.join(desktop,'launcher',name),path.join(app,name));
+for(const name of ['package-bootstrap.mjs','package-settings.mjs','static-renderer.mjs','profile-migration.mjs'])fs.copyFileSync(path.join(desktop,'launcher',name),path.join(app,name));
 for(const directory of ['.cache','public','src/renderer/.cache','src/renderer/public']){
  const target=path.join(app,directory,'assets/js/CubismSdkForWeb-5-r.3/Core');fs.mkdirSync(target,{recursive:true});fs.copyFileSync(core,path.join(target,'live2dcubismcore.min.js'));
 }

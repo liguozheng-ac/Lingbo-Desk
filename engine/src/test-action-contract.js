@@ -175,15 +175,9 @@ try {
     'the live read-only verification wording must not force write_file',
   )
   const displayContract = classifyActionContract('切换到大浏览器')
-  assert.equal(displayContract?.id, 'browser_display_mode')
-  assert.deepEqual(displayContract.requiredTools, ['browser_set_display_mode'])
-  assert.match(actionContractCompletionIssue(
-    displayContract,
-    '已经全屏显示。',
-  ), /window mode|fullscreen/i, 'window mode cannot be described as fullscreen')
-  assert.equal(verifiedActionContractReply(displayContract, {
-    result: JSON.stringify({ ok: true, browser_preview: { mode: 'window' } }),
-  }), '已切换到独立大窗口。')
+  assert.equal(displayContract, null, 'removed display switching must not force an unavailable tool')
+  const { execBrowserSetDisplayMode } = await import('./capabilities/tools/browser-display.js')
+  assert.equal(JSON.parse(execBrowserSetDisplayMode()).code, 'BROWSER_DISPLAY_REMOVED')
   const browserLoginContract = classifyActionContract('需要你帮我登录我的 X 账号')
   assert.equal(browserLoginContract?.id, 'browser_interaction')
   assert(browserLoginContract.requiredTools.includes('browser_snapshot'))
@@ -224,8 +218,7 @@ try {
   const keepOpenDisplayContract = classifyActionContract(
     '切回你的小窗口浏览器，最后停留在小窗口，不要关闭浏览器',
   )
-  assert.equal(keepOpenDisplayContract?.id, 'browser_display_mode')
-  assert.deepEqual(keepOpenDisplayContract.requiredTools, ['browser_set_display_mode'])
+  assert.equal(keepOpenDisplayContract, null, 'removed presentation requests must not close the browser or demand a stale tool')
   for (const phrase of [
     '关掉浏览器',
     '现在真正关掉你的浏览器',
@@ -327,11 +320,9 @@ try {
     ['别进详情，回列表。', 'browser_back', 'browser_navigate_back'],
     ['回刚才的搜索结果页。', 'browser_back', 'browser_navigate_back'],
     ['再往前。', 'browser_forward', 'browser_navigate_forward'],
-    ['放大一点。', 'browser_display_mode', 'browser_set_display_mode'],
     ['现在有几个标签页？', 'browser_tabs_list', 'browser_tabs'],
     ['重新打开 example.com。', 'browser_reopen', 'browser_navigate'],
     ['浏览器关一下。', 'browser_close', 'browser_close'],
-    ['行，缩回小卡片吧。', 'browser_display_mode', 'browser_set_display_mode'],
     ['打开 DuckDuckGo。', 'browser_open_url', 'browser_navigate'],
   ]
   for (const [phrase, id, tool] of directBrowserCases) {
@@ -367,27 +358,30 @@ try {
     '请用大一点的窗口打开这个网页',
     '用大 窗口 口打',
     '用小的窗口打开',
+    '放大一点。',
+    '行，缩回小卡片吧。',
   ]) {
     const spokenDisplayContract = classifyActionContract(phrase)
-    assert.equal(spokenDisplayContract?.id, 'browser_display_mode', phrase)
-    assert.deepEqual(spokenDisplayContract.requiredTools, ['browser_set_display_mode'])
+    assert.equal(spokenDisplayContract, null, phrase)
   }
   const combinedBrowserContract = classifyActionContract(
     '请用你的浏览器打开 https://example.com，保持停留，不要切换到大窗口。',
   )
-  assert.equal(combinedBrowserContract?.id, 'browser_open_in_display_mode')
+  assert.equal(combinedBrowserContract?.id, 'browser_open_url')
   assert.deepEqual(combinedBrowserContract.requiredTools, ['browser_navigate'])
-  assert.equal(combinedBrowserContract.expectedBrowserDisplayMode, 'card')
+  assert.equal(combinedBrowserContract.expectedBrowserDisplayMode, undefined)
   assert.equal(actionContractToolSucceeded(
     combinedBrowserContract,
     'browser_navigate',
-    JSON.stringify({ ok: true, browser_preview: { mode: 'card' } }),
-  ), true, 'navigation in the requested compact presentation satisfies the combined contract')
+    JSON.stringify({ ok: true, browser_preview: { url: 'https://example.com/' } }),
+    { url: 'https://example.com/' },
+  ), true, 'a real page URL satisfies navigation without a removed presentation mode')
   assert.equal(actionContractToolSucceeded(
     combinedBrowserContract,
     'browser_navigate',
-    JSON.stringify({ ok: true, browser_preview: { mode: 'window' } }),
-  ), false, 'navigation in the wrong presentation cannot satisfy the combined contract')
+    JSON.stringify({ ok: true, browser_preview: { url: 'https://example.org/' } }),
+    { url: 'https://example.org/' },
+  ), false, 'a different page cannot satisfy the navigation contract')
   const systemBrowserContract = classifyActionContract('用我电脑上的浏览器打开 https://example.com')
   assert.equal(systemBrowserContract?.id, 'system_browser_open')
   assert.deepEqual(systemBrowserContract.requiredTools, ['system_browser_open'])
@@ -397,12 +391,12 @@ try {
   ), /default browser/i)
   assert.equal(actionContractCompletionIssue(
     systemBrowserContract,
-    '已交给电脑的系统默认浏览器打开；小窗和大窗共享页面，电脑浏览器独立。',
+    '已在选定的真实 Chrome Agent Window 中打开。',
   ), '')
   assert.match(verifiedActionContractReply(systemBrowserContract, {
     args: { url: 'https://example.com/' },
     result: JSON.stringify({ ok: true, url: 'https://example.com/' }),
-  }), /系统默认浏览器.*小窗口浏览器.*同一个实时页面/s)
+  }), /选定的真实 Chrome Agent Window/s)
 
   let directNavigateRounds = 0
   const directNavigateCalls = []
@@ -1139,8 +1133,8 @@ try {
   assert.deepEqual(socialExecuted, ['write_file', 'send_message'], 'premature social completion was suppressed, not delivered')
   assert.equal(social.delivered, true)
 
-  // A successful system-browser handoff still does not prove a concrete app
-  // name, and must not be summarized as three independent browser profiles.
+  // The compatibility name routes to the selected Chrome window, not an OS
+  // default-browser handoff or the removed three-profile model.
   let systemRounds = 0
   const systemExecuted = []
   const systemReply = await callLLM({
@@ -1170,7 +1164,7 @@ try {
       }
       assert(messages.some(m => String(m.content || '').includes('do not name Safari')))
       return {
-        content: '已交给电脑的系统默认浏览器打开。小窗口和大窗口共享同一个页面，电脑浏览器独立。',
+        content: '已在选定的真实 Chrome Agent Window 中打开链接。',
         reasoningContent: '', aborted: false, toolCalls: [],
       }
     },
@@ -1186,7 +1180,7 @@ try {
   assert.equal(systemRounds, 3, 'unsupported system-browser claims get one correction round')
   assert.deepEqual(systemExecuted, ['system_browser_open', 'send_message'])
   assert.doesNotMatch(systemReply.content, /Safari|三个浏览器各自独立/)
-  assert.match(systemReply.content, /系统默认浏览器/)
+  assert.match(systemReply.content, /选定的真实 Chrome Agent Window/)
 
   let snapshotRounds = 0
   const snapshotExecuted = []

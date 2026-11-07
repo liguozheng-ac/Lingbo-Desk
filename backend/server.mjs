@@ -23,15 +23,24 @@ import { WorkPolicy } from './work-policy.mjs';
 import { WorkTools } from './work-tools.mjs';
 import { WorkBrowser } from './work-browser.mjs';
 import { WorkService } from './work-service.mjs';
+import { DiagnosticLog } from '../runtime/diagnostic-log.mjs';
+import { createSecretRedactor } from '../engine/src/runtime/diagnostic-privacy.js';
+import { EventFeed } from './event-feed.mjs';
+import { ServiceConfig } from './service-config.mjs';
+import { probeSpeech } from './service-probe.mjs';
+import { decodeAudio } from './audio-decoder.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const workspace = path.resolve(process.env.VOICE_AGENT_WORKSPACE || path.join(root, '..', '.local', 'workspace'));
 const local = path.join(workspace, '.local');
 const run = path.join(workspace, 'runs', new Date().toISOString().replace(/[:.]/g, '-'));
 fs.mkdirSync(local, { recursive: true });
+process.env.LINGBO_DIAGNOSTICS_METADATA_ONLY = '1';
 initializeData(path.join(run, 'foreground'));
 const { credentials } = await import('./credentials.mjs');
-const { deepseekKey, speech } = credentials();
+const serviceConfig = new ServiceConfig(local, credentials());
+await serviceConfig.load();
+let { deepseekKey, speech } = serviceConfig.current();
 process.env.DEEPSEEK_API_KEY = deepseekKey;
 process.env.DEEPSEEK_MODEL = 'deepseek-flash';
 const { streamTTS } = await import('../speech/adapters/tts-providers.mjs');
@@ -40,27 +49,36 @@ const { python } = await import('./python-runtime.mjs');
 const tokenFile = path.join(local, 'gateway-token');
 if (!fs.existsSync(tokenFile)) fs.writeFileSync(tokenFile, crypto.randomBytes(32).toString('hex'));
 const token = fs.readFileSync(tokenFile, 'utf8').trim();
-const sensitive = [deepseekKey, token, ...Object.values(speech.asr || {}), ...Object.values(speech.tts?.keys || {})].filter(x => typeof x === 'string' && x.length > 15);
-function clean(value) { return sensitive.reduce((s, key) => s.split(key).join('[REDACTED]'), String(value)); }
-const subscribers = new Set();
+const sensitive = [deepseekKey, token, ...Object.values(speech.asr || {}), ...Object.values(speech.tts?.keys || {})].filter(x => typeof x === 'string' && x.length >= 8);
+let clean = createSecretRedactor(sensitive);
+const diagnosticsDirectory = path.join(local, 'diagnostics');
+const diagnostics = new DiagnosticLog(diagnosticsDirectory);
+const eventFeed = new EventFeed();
 const voiceMetrics = new VoiceMetrics(record);
 let sequence = 0;
 function record(event) {
-  const safe = JSON.parse(clean(JSON.stringify({ ...event, sequence: ++sequence })));
-  fs.appendFileSync(path.join(run, 'events.jsonl'), JSON.stringify(safe) + '\n');
-  for (const res of subscribers) res.write(`id: ${safe.sequence}\ndata: ${JSON.stringify(safe)}\n\n`);
+  const safe = clean({ ...event, sequence: ++sequence });
+  diagnostics.append(safe);
+  eventFeed.publish(safe);
 }
 const sources = new SourceBundles(path.join(local, 'sources'));
 const personal = new PersonalStore(local);
 const skills = new PersonalSkills(path.join(local, 'skills'), personal);
 const models = new ModelRouter(personal, deepseekKey);
 let changingModel = false;
+let changingServices = false, activeSpeech = 0;
+function applyServices() {
+  ({ deepseekKey, speech } = serviceConfig.current()); models.cloudKey = deepseekKey;
+  process.env.DEEPSEEK_API_KEY = deepseekKey;
+  for (const value of [deepseekKey, speech.asr?.aliyunApiKey, speech.tts?.keys?.doubaoKey]) if (value && !sensitive.includes(value)) sensitive.push(value);
+  clean = createSecretRedactor(sensitive);
+}
 const webReader = new PublicWebReader(path.join(local, 'web-tmp'));
 const workPolicy = new WorkPolicy(local, { protectedPaths: [root, process.env.VOICE_PROGRAM_DIRECTORY].filter(Boolean) });
 const workBrowser = new WorkBrowser(path.join(local, 'work-browser'));
 const workTools = new WorkTools({ policy: workPolicy, personal, skills, webReader, browser: workBrowser });
-const work = new WorkService(path.join(local, 'work-tasks'), { policy: workPolicy, personal, skills, tools: workTools, record, workerEnv: job => ({ LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile}/v1`, LINGBO_MODEL_TOKEN: token, WORK_BROKER: `${origin}/work/execute` }) });
-const tasks = new ReportTaskService(path.join(run, 'tasks'), record, Number(process.env.LINGBO_TASK_HOLD_MS) || 20000, { workspace, storeDirectory: path.join(local, 'tasks'), sources, webReader, legacyRuns: path.join(workspace, 'runs'), workerOptions: job => ({ env: { LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile || personal.state.model}/v1`, LINGBO_MODEL_TOKEN: token } }) });
+const work = new WorkService(path.join(local, 'work-tasks'), { policy: workPolicy, personal, skills, tools: workTools, record, diagnosticsDirectory, workerEnv: job => ({ LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile}/v1`, LINGBO_MODEL_TOKEN: token, WORK_BROKER: `${origin}/work/execute` }) });
+const tasks = new ReportTaskService(path.join(run, 'tasks'), record, Number(process.env.LINGBO_TASK_HOLD_MS) || 20000, { workspace, storeDirectory: path.join(local, 'tasks'), sources, webReader, legacyRuns: path.join(workspace, 'runs'), workerOptions: job => ({ diagnosticsDirectory, env: { LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile || personal.state.model}/v1`, LINGBO_MODEL_TOKEN: token } }) });
 const settingsFile = path.join(local, 'settings.json');
 const loadedSettings = loadSettings(settingsFile);
 const defaultSessionId = 'lingbo-personal-validation';
@@ -69,6 +87,11 @@ let speechLanguage = loadedSettings.value.language;
 let lastLingboSeen = 0;
 let lastLingboConnectedAt = 0;
 const allowedOrigins = new Set(['http://127.0.0.1:5173', 'http://localhost:5173', 'http://127.0.0.1:5174', 'http://localhost:5174', 'null']);
+if (process.env.LINGBO_RENDERER_ORIGIN) {
+  const renderer = new URL(process.env.LINGBO_RENDERER_ORIGIN);
+  if (renderer.protocol !== 'http:' || renderer.hostname !== 'localhost' || renderer.origin !== process.env.LINGBO_RENDERER_ORIGIN) throw new Error('Invalid local renderer origin');
+  allowedOrigins.add(renderer.origin); allowedOrigins.add(renderer.origin.replace('localhost', '127.0.0.1'));
+}
 const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(value)); };
 async function command(value, key, sessionId = defaultSessionId) {
   if (value.action === 'create' || value.action === 'create_web') {
@@ -111,6 +134,7 @@ const server = http.createServer(async (req, res) => {
   const controller = new AbortController();
   let timing;
   let modelLease = false;
+  let speechLease = false;
   res.on('close', () => { if (!res.writableEnded) controller.abort(); });
   try {
     const hosts = [new URL(origin).host, new URL(origin).host.replace('127.0.0.1', 'localhost')];
@@ -131,7 +155,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'" });
       return res.end(fs.readFileSync(path.join(root, 'privacy.html')));
     }
-    if (req.method === 'GET' && ['/dashboard.mjs', '/personal-dashboard.mjs', '/work-dashboard.mjs', '/client-api.mjs', '/entry.js'].includes(url.pathname)) {
+    if (req.method === 'GET' && ['/dashboard.mjs', '/personal-dashboard.mjs', '/work-dashboard.mjs', '/service-dashboard.mjs', '/client-api.mjs', '/entry.js'].includes(url.pathname)) {
       res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(fs.readFileSync(path.join(root, url.pathname.slice(1))));
     }
@@ -139,6 +163,25 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { token, baseURL: origin + '/v1/', sessionId: defaultSessionId });
     }
     if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: { message: '本机连接凭据无效' } });
+    if (url.pathname === '/settings/services' && req.method === 'GET') return json(res, 200, serviceConfig.snapshot());
+    if (['/settings/services', '/settings/services/probe'].includes(url.pathname) && req.method === 'POST') {
+      if ((requestOrigin && requestOrigin !== origin) || ['cross-site', 'same-site'].includes(req.headers['sec-fetch-site'])) return json(res, 403, { error: { message: '请从本机工作台管理服务配置' } });
+      let value;
+      try { value = JSON.parse(await readBody(req, 16384)); }
+      catch { throw new Error('服务配置请求格式无效，请刷新工作台后重试'); }
+      if (changingServices || changingModel || models.active || activeSpeech) throw Object.assign(new Error('服务正在使用或检查中，请结束当前回复与播报后再配置'), { statusCode: 409 });
+      tasks.ensureAvailable(); work.ensureAvailable();
+      changingServices = true;
+      try {
+        if (url.pathname === '/settings/services') {
+          const snapshot = await serviceConfig.save(value); applyServices();
+          return json(res, 200, snapshot);
+        }
+        if (['deepseek', 'ollama'].includes(value.id)) return json(res, 200, { ...await models.probe(value.id, controller.signal), scope: '单次文本生成；未切换当前模型' });
+        return json(res, 200, await probeSpeech(value.id, speech, { createSession: createCloudASRSession, streamTTS, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30000)]) }));
+      } finally { changingServices = false; }
+    }
+    if (changingServices && req.method === 'POST' && ['/work/submit', '/task-control', '/personal/model/probe', '/personal/model/select', '/v1/chat/completions', '/v1/audio/speech', '/v1/audio/transcriptions'].some(route => url.pathname === route || url.pathname.endsWith('/v1/chat/completions'))) throw Object.assign(new Error('正在更新或检查服务配置，请稍后重试'), { statusCode: 409 });
     const workerRoute = /^\/worker\/(deepseek|ollama)\/v1\/chat\/completions$/.exec(url.pathname);
     if (workerRoute) url.pathname = '/v1/chat/completions';
     const sessionId = String(req.headers['x-lingbo-session'] || defaultSessionId);
@@ -146,11 +189,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/voice/metrics') return json(res, 200, { items: voiceMetrics.list(), native: voiceMetrics.native, rawAudioStored: false, rawTextStored: false });
     if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { checkedAt: new Date().toISOString(), workspace, uptimeSeconds: Math.round(process.uptime()), memoryMiB: Math.round(process.memoryUsage().rss / 1048576), activeModelRequests: models.active, selectedModel: personal.state.model, desktopConnected: Date.now() - lastLingboSeen < 20000, taskStates: [...tasks.jobs.values()].reduce((counts, job) => { counts[job.status] = (counts[job.status] || 0) + 1; return counts; }, {}), workStates: work.list().reduce((counts, job) => { counts[job.status] = (counts[job.status] || 0) + 1; return counts; }, {}), warnings: [...tasks.warnings, ...work.warnings], memoryEntries: personal.state.memories.length, enabledSkills: skills.list().filter(s => s.enabled).map(s => s.id) });
     if (req.method === 'POST' && ['/v1/chat/completions', '/v1/audio/speech', '/v1/audio/transcriptions'].includes(url.pathname)) {
+      if (url.pathname !== '/v1/chat/completions') { activeSpeech++; speechLease = true; }
       timing = voiceMetrics.begin(url.pathname.endsWith('transcriptions') ? 'asr' : url.pathname.endsWith('speech') ? 'tts' : 'llm', sessionId, String(req.headers['x-voice-trace'] || ''));
       res.setHeader('X-Voice-Trace', timing.id); res.setHeader('Access-Control-Expose-Headers', 'X-Voice-Trace');
     }
     if (!workerRoute && req.headers['x-lingbo-session'] && url.pathname === '/v1/chat/completions') activeLingboSessionId = sessionId;
-    if (req.method === 'GET' && url.pathname === '/status') return json(res, 200, { pid: process.pid, run, sessionId, activeLingboSessionId, model: models.choice(), modelsInFlight: models.active, memoryCount: personal.state.memories.length, language: speechLanguage, settingsWarning: loadedSettings.warning || null, taskWarnings: tasks.warnings, lingboConnected: Date.now() - lastLingboSeen < 20000, lastLingboConnectedAt, llm: personal.state.model === 'ollama' || !!deepseekKey, asr: !!speech.asr?.aliyunApiKey, tts: !!speech.tts?.keys, jobs: [...tasks.jobs.values()].map(job => tasks.snapshot(job.id)) });
+    if (req.method === 'GET' && url.pathname === '/status') return json(res, 200, { pid: process.pid, run, sessionId, activeLingboSessionId, model: models.choice(), modelsInFlight: models.active, memoryCount: personal.state.memories.length, language: speechLanguage, settingsWarning: [loadedSettings.warning, serviceConfig.warning].filter(Boolean).join('\n') || null, taskWarnings: tasks.warnings, lingboConnected: Date.now() - lastLingboSeen < 20000, lastLingboConnectedAt, llm: personal.state.model === 'ollama' || !!deepseekKey, asr: !!speech.asr?.aliyunApiKey, tts: !!speech.tts?.keys?.doubaoKey, configurationRequired: personal.state.model === 'deepseek' && !deepseekKey, jobs: [...tasks.jobs.values()].map(job => tasks.snapshot(job.id)) });
     if (req.method === 'GET' && url.pathname === '/personal') return json(res, 200, { ...personal.snapshot(), skills: skills.list(), profiles: Object.values(profiles).map(({ id, name, model }) => ({ id, name, model })) });
     if (req.method === 'POST' && url.pathname === '/personal/memory') {
       const value = JSON.parse(await readBody(req, 8192));
@@ -195,10 +239,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { language: speechLanguage });
     }
     if (req.method === 'GET' && url.pathname === '/events') {
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
-      res.write(': connected\n\n'); subscribers.add(res);
-      const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 10000);
-      req.on('close', () => { clearInterval(heartbeat); subscribers.delete(res); }); return;
+      eventFeed.subscribe(res); return;
     }
     if (req.method === 'POST' && url.pathname === '/sources/import') {
       const data = await readBody(req, 22 * 1024 * 1024);
@@ -220,12 +261,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/work/submit') {
       if (changingModel) throw new Error('正在切换模型，请稍后提交任务');
-      const value = JSON.parse(await readBody(req, 24000));
+      const value = JSON.parse(await readBody(req, 80000));
       const task = work.create(sessionId, String(req.headers['x-request-id'] || crypto.randomUUID()), value);
       return json(res, 200, { task, content: `工作任务已提交：${task.id}。可继续聊天；需要确认时在本机任务台处理，任务完成以执行回执为准。` });
     }
     if (req.method === 'POST' && ['/work/control', '/work/approve'].includes(url.pathname)) {
-      const value = JSON.parse(await readBody(req, 24000)); const job = work.find(sessionId, value.taskId);
+      const value = JSON.parse(await readBody(req, 80000)); const job = work.find(sessionId, value.taskId);
       return json(res, 200, { task: url.pathname.endsWith('/approve') ? await work.approve(job, value) : work.control(job, value) });
     }
     if (req.method === 'POST' && url.pathname === '/work/execute') {
@@ -359,7 +400,7 @@ const server = http.createServer(async (req, res) => {
       try {
         timing?.mark('fileReceived');
         fs.writeFileSync(input, Buffer.from(await file.arrayBuffer()));
-        await promisify(execFile)(python, [path.join(root, '../speech/decode-audio.py'), input, output], { windowsHide: true, signal: controller.signal });
+        await decodeAudio(python, path.join(root, '../speech/decode-audio.py'), input, output, controller.signal);
         const pcm = fs.readFileSync(output);
         timing?.mark('decoded');
         if (pcm.length > 32 * 32000) throw new Error('单段音频最多 32 秒');
@@ -384,7 +425,7 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) {
       json(res, error.statusCode || 400, { error: { message: detail.message, ...(code ? { code } : {}) } });
     } else res.destroy();
-  } finally { if (modelLease) models.active--; }
+  } finally { if (modelLease) models.active--; if (speechLease) activeSpeech--; }
 });
 await new Promise((resolve, reject) => { server.once('error', reject); server.listen(Number(process.env.LINGBO_GATEWAY_PORT) || 3850, '127.0.0.1', resolve); });
 origin = `http://127.0.0.1:${server.address().port}`;
@@ -394,11 +435,16 @@ console.log('LINGBO_GATEWAY_READY ' + origin);
 let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return; shuttingDown = true;
-  for (const res of subscribers) res.end();
+  eventFeed.close();
   server.close();
-  await tasks.close();
-  await work.close();
-  process.exit(0);
+  const closed = await Promise.allSettled([tasks.close(), work.close()]);
+  const incomplete = closed.some(result => result.status === 'rejected') || [...work.jobs.values()].some(job => job.worker || job.inTool);
+  diagnostics.append({ type: 'gateway.closed', data: { ok: !incomplete } }); diagnostics.close();
+  process.exit(incomplete ? 1 : 0);
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+if (process.send) {
+  process.on('message', message => { if (message?.command === 'shutdown') void shutdown(); });
+  process.on('disconnect', () => { void shutdown(); });
+}

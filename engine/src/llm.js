@@ -20,6 +20,7 @@ import {
 import { streamWriteFileArgumentPreview } from './write-file-preview.js'
 import { formatBrowserDownloadContext } from './browser-download-context.js'
 import { getLLMProtocol } from './llm-protocol.js'
+import { createToolExecutionBoundary } from './runtime/tool-execution-boundary.js'
 import {
   actionContractCompletionIssue,
   actionContractToolCallIssue,
@@ -1014,7 +1015,7 @@ function isCloserPattern(content) {
 //   refresh agent 的上下文"，**不**期望模型回复用户。当 silentSignal=true 时，
 //   runtime 直接拦截 send_message 调用（不让它真投递），并在工具结果里告知
 //   "本轮是 silent 系统信号，不要 send_message"，让模型从这次拒绝里学到边界。
-export async function callLLM({ systemPrompt, message, messages: inputMessages = null, temperature = 0.5, topP = 0.9, tools = [], maxTokens, thinking = true, signal, onToolCall, onToolExecute, onStream, onRetry, onModelAccept, toolContext = {}, mustReply = false, silentSignal = false, localReply = false, toolLoopLimits = null, _streamOnceForTest = null, _executeToolForTest = null }) {
+export async function callLLM({ systemPrompt, message, messages: inputMessages = null, temperature = 0.5, topP = 0.9, tools = [], maxTokens, thinking = true, signal, onToolCall, onToolExecute, onStream, onRetry, onModelAccept, toolContext = {}, mustReply = false, silentSignal = false, localReply = false, toolLoopLimits = null, executionPolicy = null, _streamOnceForTest = null, _executeToolForTest = null }) {
   // A tool chain must replay to the connection and protocol that produced it.
   // Settings changes apply to the next turn; credential revocation is still
   // checked by the model connection before every outgoing request.
@@ -1040,7 +1041,6 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
   // send_message when it independently decides to communicate. Do not infer
   // external intent from heartbeat prose or manufacture a fallback send.
   const allowPlainTextFallback = Boolean(mustReply && toolContext?.outputContract !== 'explicit_send_only')
-  const runTool = _executeToolForTest || executeTool
   const loopLimits = { ...TOOL_LOOP_LIMITS }
   if (toolLoopLimits && typeof toolLoopLimits === 'object') {
     for (const key of Object.keys(loopLimits)) {
@@ -1048,6 +1048,14 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
       if (Number.isFinite(value) && value > 0) loopLimits[key] = Math.max(1, Math.floor(value))
     }
   }
+  const executionBoundary = createToolExecutionBoundary({
+    schemas: toolSchemas,
+    allowedTools: executionPolicy?.allowedTools,
+    budget: executionPolicy?.budget,
+    maxTotalCalls: loopLimits.maxTotalCalls,
+    execute: _executeToolForTest || executeTool,
+  })
+  const runTool = (...args) => executionBoundary.execute(...args)
   const tickState = toolContext?.tickContext
     ? {
         id: String(toolContext.tickContext.id || 'tick'),
@@ -1466,7 +1474,9 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
         normalizedArgs.replace = true
       }
       const fingerprint = buildToolFingerprint(tc.name, normalizedArgs)
-      const stopReason = getToolLoopStopReason(toolLoopState, tc.name, fingerprint, loopLimits)
+      const stopReason = executionBoundary.remaining < 1
+        ? 'tool execution budget exhausted'
+        : getToolLoopStopReason(toolLoopState, tc.name, fingerprint, loopLimits)
       return { tc, normalizedArgs, fingerprint, stopReason, hadEmptyArguments }
     }
 
@@ -1839,7 +1849,7 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
         continue
       }
       const canParallelize = isParallelSafeTool(firstPrepared.tc.name, firstPrepared.normalizedArgs)
-      const remainingBudget = loopLimits.maxTotalCalls - toolLoopState.totalCalls
+      const remainingBudget = executionBoundary.remaining
 
       if (canParallelize && !firstPrepared.stopReason && remainingBudget > 1) {
         const preparedBatch = [firstPrepared]

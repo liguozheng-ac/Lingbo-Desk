@@ -1,4 +1,5 @@
 import { getDB } from '../connection.js'
+import { metadataOnlyDiagnostics } from '../../runtime/diagnostic-privacy.js'
 
 export function insertRecallAudit({
   turn_label = null,
@@ -11,6 +12,7 @@ export function insertRecallAudit({
   latency_ms = null,
   source = null,
 } = {}) {
+  if (metadataOnlyDiagnostics()) return
   try {
     const ids = Array.isArray(matched_mem_ids) ? matched_mem_ids : []
     getDB().prepare(`
@@ -47,6 +49,7 @@ export function insertExtractAudit({
   skipped = false,
   skip_reason = null,
 } = {}) {
+  if (metadataOnlyDiagnostics()) return
   try {
     const ids = Array.isArray(extracted_mem_ids) ? extracted_mem_ids : []
     getDB().prepare(`

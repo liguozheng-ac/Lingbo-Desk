@@ -4,7 +4,13 @@
 
 Windows 桌面语音 Agent。支持持续交流、数字人展示，以及聊天期间执行文件、Office 和浏览器任务。
 
-当前版本：0.3.0。个人项目，面向 Windows x64 验证。
+日常安装版基线为 **0.3.0**。`main` 包含后续 Windows x64 开发更新，便携候选版本为 **0.3.4-test**。
+
+## 原创 Live2D 角色预览
+
+<img src="docs/media/lingbo-original-live2d.png" alt="聆泊原创 Live2D 角色 B" width="320" />
+
+角色 B 的 Cubism 模型已完成外观组装、独立眨眼和基础嘴型绑定。图片来自 **t008** 模型的原生导出。角色目前处于编辑器验证阶段。
 
 ## 功能
 
@@ -14,6 +20,13 @@ Windows 桌面语音 Agent。支持持续交流、数字人展示，以及聊天
 - 文件与 Office 文档处理、独立浏览器会话。
 - 明确保存的长期记忆、Skills 导入与版本管理。
 - DeepSeek 云端模型和本机 Ollama 切换。
+
+## 近期开发更新
+
+- Agent 工具白名单、调用预算与文件产物验收。[执行记录](docs/work-execution-hardening.md)
+- 长 Word 分段读取、精确修改和任务故障恢复。[验证记录](docs/long-documents-and-recovery.md)
+- Windows 便携测试包、粉色应用图标、服务连接检查及密钥加密保存。[测试包说明](docs/windows-test-package.md) · [配置与评测](docs/service-onboarding-and-real-evaluation.md)
+- 历史语音附件读取兼容修复已在专项桌面候选中验证，安装版语音复测待完成。
 
 ## 工程设计
 

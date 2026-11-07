@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { publicTarget } from './web-reader.mjs';
+import { workerEnvironment } from '../runtime/worker-environment.mjs';
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // A dedicated, empty browser profile. Never attaches to the user's tabs/profile.
 export class WorkBrowser {
@@ -12,7 +13,7 @@ export class WorkBrowser {
     const executable = this.executable || [process.env['ProgramFiles(x86)'], process.env.ProgramFiles].filter(Boolean).map(p => path.join(p, 'Microsoft/Edge/Application/msedge.exe')).find(fs.existsSync);
     if (!executable) throw new Error('未找到 Microsoft Edge；可使用公开网页读取工具');
     const profile = path.join(this.directory, job.id, crypto.randomUUID()); fs.mkdirSync(profile, { recursive: true });
-    const child = spawn(executable, ['--user-data-dir=' + profile, '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--disable-features=msEdgeSidebarV2', ...(this.headless ? ['--headless=new'] : []), 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+    const child = spawn(executable, ['--user-data-dir=' + profile, '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--disable-features=msEdgeSidebarV2', ...(this.headless ? ['--headless=new'] : []), 'about:blank'], { windowsHide: true, stdio: 'ignore', env: workerEnvironment() });
     const fail = { error: null }; child.on('error', e => { fail.error = e; });
     let socket;
     try {

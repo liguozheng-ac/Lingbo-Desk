@@ -1,4 +1,5 @@
 import { getDB } from '../connection.js'
+import { metadataOnlyDiagnostics } from '../../runtime/diagnostic-privacy.js'
 
 const EVENT_LIMIT = 800
 const PAYLOAD_LIMIT = 6000
@@ -39,6 +40,7 @@ function serializePayload(payload) {
 }
 
 export function insertBrainUiEvent({ timestamp, path = 'l2', eventType, payload = {} }) {
+  if (metadataOnlyDiagnostics()) return 0
   const db = getDB()
   const ts = timestamp || new Date().toISOString()
   const normalizedPath = path === 'l1' || path === 'l3' ? path : 'l2'
