@@ -108,8 +108,8 @@ See the [Verification record (Chinese)](docs/verification.md) for the scope and 
 - The separate worker process is not an operating system sandbox. Skills scripts run with the current user's permissions.
 - Complex Office documents, long-running sessions, sleep and wake, and deployment across machines need further validation.
 
-## Third-party components and assets
+## License
 
-Libraries, fonts, icons, models, and SDKs remain subject to their respective terms. See [Third-party notices](THIRD-PARTY-NOTICES.md).
+Original Lingbo Desk code that the project copyright holder is entitled to license is available under the [MIT License](LICENSE). Third-party code and components follow their respective licenses and copyright notices. Fonts, icons, models, and SDKs follow their own terms. The original Live2D preview image is provided for project display, with separate permission required for reuse. See [Third-party notices and assets](THIRD-PARTY-NOTICES.md).
 
-This repository excludes personal configuration, credentials, chat history, installed dependencies, and previous Git history. A separate distribution license for the main project has not yet been specified.
+This repository excludes personal configuration, credentials, chat history, installed dependencies, and previous Git history.
