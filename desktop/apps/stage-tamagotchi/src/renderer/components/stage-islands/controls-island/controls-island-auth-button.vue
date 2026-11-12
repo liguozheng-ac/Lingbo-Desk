@@ -42,8 +42,12 @@ function handleClick() {
 }
 
 function doSigningIn() {
+  if (signingIn.value)
+    return
   signingIn.value = true
-  startSigningIn()
+  void startSigningIn().catch(() => {
+    signingIn.value = false
+  })
 }
 
 // Each listener belongs to this mounted menu, including its hidden measurement state.

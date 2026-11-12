@@ -4,13 +4,13 @@
 
 A Windows desktop voice agent for continuous conversation, an animated character, and file, Office, and browser tasks that run while you chat.
 
-The installed release baseline is **0.3.0**. `main` includes subsequent Windows x64 development updates, with **0.3.4-test** as the portable test candidate.
+The current source version and locally verified Windows installation are **0.3.5**. This repository distributes source code; the installer is not publicly distributed. [Changelog](CHANGELOG.md) · [Real-model and voice acceptance (Chinese)](docs/acceptance-0.3.5.md)
 
 ## Original Live2D character preview
 
 <img src="docs/media/lingbo-original-live2d.png" alt="Lingbo Desk original Live2D Character B" width="320" />
 
-Character B has assembled artwork, independent eyelid controls, and a basic mouth rig. The image is a native export of the **t008** Cubism model. The character is currently at the editor validation stage.
+Character B is integrated into the desktop installation, with automatic blinking and basic audio-amplitude-driven mouth movement. Live voice acceptance has passed based on user feedback. The image is a native export of the **t008** Cubism model. [Integration notes (Chinese)](docs/original-character-integration.md)
 
 ## Features
 
@@ -26,7 +26,8 @@ Character B has assembled artwork, independent eyelid controls, and a basic mout
 - Agent tool allowlists, execution budgets, and checks for task outputs. [Execution notes](docs/work-execution-hardening.md)
 - Windowed reads and precise edits for long Word documents, plus task recovery checks. [Verification notes](docs/long-documents-and-recovery.md)
 - A Windows portable test build, a pink app icon, service connection checks, and encrypted credential storage. [Packaging notes](docs/windows-test-package.md) · [Configuration and evaluation](docs/service-onboarding-and-real-evaluation.md)
-- Compatibility with older voice attachments was verified in a dedicated desktop candidate. Installed-app voice retesting is pending.
+- Version 0.3.5 integrates historical audio attachment compatibility, local-login loop protection, the window-dragging fix, and the original character. Local installation upgrades and graceful restarts were verified. [Build and upgrade record (Chinese)](docs/release-0.3.5.md)
+- Continuous voice, lip sync, and natural interruption received user confirmation on the current installation. Small real-DeepSeek file, DOCX, and independent-browser cases passed; these are not general success-rate or long-term reliability measurements. [Acceptance scope (Chinese)](docs/acceptance-0.3.5.md)
 
 ## Architecture
 
@@ -80,7 +81,7 @@ Copy-Item .env.example .env
 pnpm start
 ```
 
-The backend defaults to `http://127.0.0.1:3850`. Building the desktop app also requires importing Cubism Core after accepting its applicable terms yourself. SDK binaries and character model packages are not included in this source repository.
+The backend defaults to `http://127.0.0.1:3850`. Building the desktop app requires importing Cubism Core after accepting its applicable terms yourself. Only the original Character B runtime assets and preview are included; Cubism Core, third-party characters, and language model weights are excluded. Asset permissions are separate from the code's MIT license.
 
 ```powershell
 pnpm --dir desktop run build:modules

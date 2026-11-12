@@ -75,6 +75,8 @@ your-assets/
 
 ## 桌面连接后端
 
+本地版默认不启用账号登录，语音、角色与本地任务无需账号。只有部署了独立 OIDC 服务的版本才能在构建时设置 `VITE_ENABLE_ACCOUNT_LOGIN=true`，并配置对应的 `VITE_SERVER_URL` 等 OIDC 参数；不要将本机语音网关当作账号服务。
+
 开发时先启动后端，再运行 `pnpm run dev:desktop`。首次使用在桌面设置中选择 OpenAI-compatible 提供商，使用本机 `/v1/` 地址和本机连接凭据；模型名称为 `voice-agent-default`。
 识别和合成分别使用相应的 OpenAI-compatible 音频提供商，模型名称为 `local-paraformer`、`local-doubao-tts`。
 

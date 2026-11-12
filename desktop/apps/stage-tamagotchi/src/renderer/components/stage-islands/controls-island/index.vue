@@ -76,7 +76,10 @@ const context = useElectronEventaContext()
 const { enabled, listening, off: microphoneOff } = storeToRefs(settingsAudioDeviceStore)
 const { alwaysOnTop, controlsIslandIconSize } = storeToRefs(settingsStore)
 const openSettings = useElectronEventaInvoke(electronOpenSettings)
-const isLinux = useElectronEventaInvoke(electron.app.isLinux)
+const isLinux = ref(false)
+useElectronEventaInvoke(electron.app.isLinux)()
+  .then(value => isLinux.value = value)
+  .catch(error => console.warn('[Controls Island] Failed to detect platform:', error))
 const quitApp = useElectronEventaInvoke(electronAppQuit)
 const setAlwaysOnTop = useElectronEventaInvoke(electronWindowSetAlwaysOnTop)
 const centerMainWindow = useElectronEventaInvoke(electronCenterMainWindow)
@@ -339,7 +342,14 @@ const panelPositionClasses = computed(() => {
  *
  * See `apps/stage-tamagotchi/src/main/windows/main/index.ts` for handler definition
  */
-const startDraggingWindow = !isLinux() ? defineInvoke(context.value, electronStartDraggingWindow) : undefined
+const startDraggingWindow = defineInvoke(context.value, electronStartDraggingWindow)
+
+function handleStartDraggingWindow() {
+  // The platform probe is asynchronous; testing its Promise disabled native
+  // dragging on Windows. Linux uses the CSS drag region instead of the plugin.
+  if (!isLinux.value)
+    void startDraggingWindow().catch(error => console.error('[Controls Island] Failed to start dragging:', error))
+}
 
 function refreshWindow() {
   window.location.reload()
@@ -671,7 +681,7 @@ function resetMainWindowPosition() {
           />
 
           <ControlButtonTooltip side="inward">
-            <ControlButton :button-style="adjustStyleClasses.button" :class="['cursor-move', { 'drag-region': isLinux }]" @mousedown="startDraggingWindow?.()">
+            <ControlButton data-testid="controls-island-drag" :button-style="adjustStyleClasses.button" :class="['cursor-move', { 'drag-region': isLinux }]" @mousedown="handleStartDraggingWindow">
               <div :class="['i-ph:arrows-out-cardinal text-neutral-800 dark:text-neutral-300', adjustStyleClasses.icon]" />
             </ControlButton>
             <template #tooltip>

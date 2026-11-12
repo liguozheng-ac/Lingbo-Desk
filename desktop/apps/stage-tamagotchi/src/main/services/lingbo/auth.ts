@@ -107,6 +107,20 @@ export function createAuthService(params: {
       return
     }
 
+    // The local voice gateway is not an OIDC server. Account login must be an
+    // explicit build capability, otherwise an auth retry can keep launching it
+    // in the system browser without ever receiving a callback.
+    if (import.meta.env.VITE_ENABLE_ACCOUNT_LOGIN !== 'true') {
+      const error = '此本地版本未启用账号登录服务。语音、角色和本地任务无需登录即可使用。'
+      publishAuthStatus({ attemptId: generateState(), state: 'error', error })
+      params.context.emit(electronAuthCallbackError, { error })
+      return
+    }
+    // Repeated requests from the same owner reuse the pending attempt. Another
+    // window can still replace it, with the existing stale-result protection.
+    if (activeAttempt?.window === params.window && !activeAttempt.controller.signal.aborted)
+      return
+
     cancelLogin()
     const attempt: LoginAttempt = { attemptId: generateState(), window: params.window, controller: new AbortController() }
     activeAttempt = attempt

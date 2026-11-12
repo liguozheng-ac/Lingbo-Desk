@@ -12,7 +12,7 @@ import { packageModelFixture } from '../backend/test-support/package-model.mjs';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url))), candidate = path.resolve(process.argv[2] || '');
 assert.ok(process.argv[2], 'Provide a newly built candidate, never the installed application');
 const resources = path.join(candidate, 'resources'), manifest = JSON.parse(fs.readFileSync(path.join(resources, 'package-manifest.json'), 'utf8'));
-assert.equal(manifest.version, '0.3.4-test');
+assert.equal(manifest.version, JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version);
 assert.ok(fs.existsSync(path.join(candidate, 'LingboDesk.exe')), 'Candidate executable is missing');
 const artifacts = path.join(root, 'artifacts'); fs.mkdirSync(artifacts, { recursive: true });
 const workspace = fs.mkdtempSync(path.join(artifacts, 'package-smoke-')), local = path.join(workspace, '.local'); fs.mkdirSync(local);

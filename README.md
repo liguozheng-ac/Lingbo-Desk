@@ -4,13 +4,13 @@
 
 Windows 桌面语音 Agent。支持持续交流、数字人展示，以及聊天期间执行文件、Office 和浏览器任务。
 
-日常安装版基线为 **0.3.0**。`main` 包含后续 Windows x64 开发更新，便携候选版本为 **0.3.4-test**。
+当前源码及本机已验收的 Windows 安装版为 **0.3.5**。本仓库提供源码，安装包暂不公开发布。[版本说明](CHANGELOG.md) · [真实模型与语音验收](docs/acceptance-0.3.5.md)
 
 ## 原创 Live2D 角色预览
 
 <img src="docs/media/lingbo-original-live2d.png" alt="聆泊原创 Live2D 角色 B" width="320" />
 
-角色 B 的 Cubism 模型已完成外观组装、独立眨眼和基础嘴型绑定。图片来自 **t008** 模型的原生导出。角色目前处于编辑器验证阶段。
+角色 B 已接入桌面安装版，支持自动眨眼及音频强度驱动的基础嘴部开合，真人语音验收已通过。图片来自 **t008** 模型的原生导出。[接入记录](docs/original-character-integration.md)
 
 ## 功能
 
@@ -26,7 +26,8 @@ Windows 桌面语音 Agent。支持持续交流、数字人展示，以及聊天
 - Agent 工具白名单、调用预算与文件产物验收。[执行记录](docs/work-execution-hardening.md)
 - 长 Word 分段读取、精确修改和任务故障恢复。[验证记录](docs/long-documents-and-recovery.md)
 - Windows 便携测试包、粉色应用图标、服务连接检查及密钥加密保存。[测试包说明](docs/windows-test-package.md) · [配置与评测](docs/service-onboarding-and-real-evaluation.md)
-- 历史语音附件读取兼容修复已在专项桌面候选中验证，安装版语音复测待完成。
+- 0.3.5 整合历史语音附件兼容、本地账号登录防循环、拖动修复及原创角色；已完成本机安装升级和正常重启。[收口记录](docs/release-0.3.5.md)
+- 当前安装版已获连续语音、嘴型及自然打断正常反馈；真实 DeepSeek 文件、DOCX 与独立浏览器小样本验收通过。这些结果不代表通用成功率或长期稳定性。[验收范围](docs/acceptance-0.3.5.md)
 
 ## 工程设计
 
@@ -81,7 +82,7 @@ Copy-Item .env.example .env
 pnpm start
 ```
 
-后端默认地址为 `http://127.0.0.1:3850`。桌面构建需要另外导入本人已接受条款的 Cubism Core；源代码仓库不包含 SDK 二进制或角色模型包。
+后端默认地址为 `http://127.0.0.1:3850`。桌面构建需要另外导入本人已接受条款的 Cubism Core。仓库仅附原创角色 B 的运行素材和预览，不包含 Cubism Core、第三方角色模型或语言模型权重；素材授权与代码 MIT 许可证分开处理。
 
 ```powershell
 pnpm --dir desktop run build:modules

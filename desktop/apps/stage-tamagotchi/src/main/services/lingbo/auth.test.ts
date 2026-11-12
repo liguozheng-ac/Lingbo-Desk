@@ -6,7 +6,7 @@ import { setImmediate } from 'node:timers/promises'
 
 import { createContext, defineInvoke } from '@moeru/eventa'
 import { shell } from 'electron'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { electronAuthCallback, electronAuthCallbackError, electronAuthComplete, electronAuthGetStatus, electronAuthLogout, electronAuthStartLogin } from '../../../shared/eventa'
 import { createAuthService } from './auth'
@@ -17,10 +17,15 @@ describe('electron login request ownership', () => {
   const cleanups: Array<() => Promise<void>> = []
   const networkFetch = globalThis.fetch
 
+  beforeEach(() => {
+    vi.stubEnv('VITE_ENABLE_ACCOUNT_LOGIN', 'true')
+  })
+
   afterEach(async () => {
     for (const cleanup of cleanups.splice(0))
       await cleanup()
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     vi.mocked(shell.openExternal).mockReset().mockResolvedValue(undefined)
   })
 
@@ -57,6 +62,27 @@ describe('electron login request ownership', () => {
     const response = await networkFetch(`http://127.0.0.1:${port}/callback?code=test-code&state=${state}`)
     expect(response.ok).toBe(true)
   }
+
+  it('never opens a browser when account login is not enabled in the local build', async () => {
+    vi.stubEnv('VITE_ENABLE_ACCOUNT_LOGIN', undefined)
+    const login = windowLogin(100)
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    await Promise.all(Array.from({ length: 25 }, () => login.start()))
+    expect(shell.openExternal).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect((await login.getStatus())?.state).toBe('error')
+    expect((await login.getStatus())?.error).toContain('未启用账号登录服务')
+    expect(login.received).not.toHaveBeenCalled()
+  })
+
+  it('opens one browser for repeated requests while the same window is signing in', async () => {
+    const login = windowLogin(101)
+    await login.start()
+    const status = await login.getStatus()
+    await Promise.all(Array.from({ length: 25 }, () => login.start()))
+    expect(shell.openExternal).toHaveBeenCalledTimes(1)
+    expect((await login.getStatus())?.attemptId).toBe(status?.attemptId)
+  })
 
   // ROOT CAUSE:
   // Closing the loopback does not cancel a token exchange that already started.

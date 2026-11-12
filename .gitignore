@@ -29,7 +29,11 @@ releases/
 resources/local/
 desktop/apps/stage-tamagotchi/public/assets/js/
 desktop/apps/stage-tamagotchi/src/renderer/public/assets/js/
-desktop/packages/stage-ui/src/assets/live2d/models/
+desktop/packages/stage-ui/src/assets/live2d/models/*
+!desktop/packages/stage-ui/src/assets/live2d/models/lingbo-original-b.zip
+!desktop/packages/stage-ui/src/assets/live2d/models/lingbo-original-b/
+desktop/packages/stage-ui/src/assets/live2d/models/lingbo-original-b/*
+!desktop/packages/stage-ui/src/assets/live2d/models/lingbo-original-b/preview.png
 desktop/packages/stage-ui/src/assets/vrm/models/
 
 # Generated bridge and launcher copies

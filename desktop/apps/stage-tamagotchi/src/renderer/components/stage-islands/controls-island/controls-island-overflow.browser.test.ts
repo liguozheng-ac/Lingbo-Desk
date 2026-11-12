@@ -21,7 +21,7 @@ import { createI18n } from 'vue-i18n'
 
 import ControlsIsland from './index.vue'
 
-import { electronOpenSettings } from '../../../../shared/eventa'
+import { electron, electronOpenSettings, electronStartDraggingWindow } from '../../../../shared/eventa'
 import { controlsIslandPlacementKey } from './use-controls-island-placement'
 
 import '@unocss/reset/tailwind.css'
@@ -29,6 +29,8 @@ import 'virtual:uno.css'
 
 const isOutside = ref(false)
 const openSettings = vi.fn().mockResolvedValue(undefined)
+const platformIsLinux = ref(false)
+const nativeDrag = vi.fn().mockResolvedValue(undefined)
 const authState = vi.hoisted(() => ({
   credits: { value: 0 },
   isAuthenticated: { value: false },
@@ -43,13 +45,13 @@ const authState = vi.hoisted(() => ({
 
 vi.mock('@lingbo/electron-vueuse', () => ({
   useElectronEventaContext: () => ref({ on: vi.fn(() => vi.fn()), emit: vi.fn() }),
-  useElectronEventaInvoke: (event: unknown) => event === electronOpenSettings ? openSettings : vi.fn().mockResolvedValue(false),
+  useElectronEventaInvoke: (event: unknown) => event === electronOpenSettings ? openSettings : event === electron.app.isLinux ? vi.fn(async () => platformIsLinux.value) : vi.fn().mockResolvedValue(false),
   useElectronMouseInElement: () => ({ isOutside }),
 }))
 
 vi.mock('@moeru/eventa', async importOriginal => ({
   ...await importOriginal<typeof import('@moeru/eventa')>(),
-  defineInvoke: () => vi.fn(),
+  defineInvoke: (_context: unknown, event: unknown) => event === electronStartDraggingWindow ? nativeDrag : vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@lingbo/stage-ui/stores/auth', async () => {
@@ -129,6 +131,8 @@ function mountControlsIsland(dock: ControlsIslandDock, size: typeof sizes[number
 beforeEach(() => {
   isOutside.value = false
   openSettings.mockClear()
+  platformIsLinux.value = false
+  nativeDrag.mockClear()
   authState.credits.value = 0
   authState.isAuthenticated.value = false
   authState.needsLogin.value = false
@@ -136,6 +140,26 @@ beforeEach(() => {
 })
 
 describe('controls Island overflow', () => {
+  it('starts native dragging on Windows after an asynchronous platform probe', async () => {
+    const { screen } = mountControlsIsland('top-right')
+    await nextTick()
+    const button = screen.getByTestId('controls-island-drag').element() as HTMLElement
+    expect(button.classList.contains('drag-region')).toBe(false)
+    button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    expect(nativeDrag).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the Linux CSS drag region without calling the native plugin', async () => {
+    platformIsLinux.value = true
+    const { screen } = mountControlsIsland('top-right')
+    await nextTick()
+    await nextTick()
+    const button = screen.getByTestId('controls-island-drag').element() as HTMLElement
+    expect(button.classList.contains('drag-region')).toBe(true)
+    button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    expect(nativeDrag).not.toHaveBeenCalled()
+  })
+
   for (const dock of docks) {
     for (const size of sizes) {
       // ROOT CAUSE:

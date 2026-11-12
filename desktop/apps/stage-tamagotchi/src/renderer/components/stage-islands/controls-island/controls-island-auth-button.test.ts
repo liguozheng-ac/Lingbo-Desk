@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, h, nextTick, ref } from 'vue'
 
 import ControlsIslandAuthButton from './controls-island-auth-button.vue'
@@ -44,6 +44,10 @@ vi.mock('vue-i18n', () => ({
 describe('controlsIslandAuthButton', () => {
   const mountedApps: Array<{ app: ReturnType<typeof createApp>, host: HTMLElement }> = []
 
+  beforeEach(() => {
+    invokes.startLogin.mockResolvedValue(undefined)
+  })
+
   afterEach(() => {
     for (const { app, host } of mountedApps) {
       app.unmount()
@@ -68,6 +72,28 @@ describe('controlsIslandAuthButton', () => {
     mountedApps.push({ app, host })
     return host
   }
+
+  it('does not reopen login while its previous request is still pending', async () => {
+    authState.isAuthenticated.value = false
+    const host = mountComponent()
+    host.querySelector('button')!.click()
+    host.querySelector('button')!.click()
+    await nextTick()
+    expect(invokes.startLogin).toHaveBeenCalledOnce()
+  })
+
+  it('clears the pending state after an IPC rejection so the user can retry', async () => {
+    authState.isAuthenticated.value = false
+    invokes.startLogin.mockRejectedValueOnce(new Error('IPC disconnected'))
+    const host = mountComponent()
+    host.querySelector('button')!.click()
+    await nextTick()
+    await nextTick()
+    expect(host.querySelector('button')).toBeTruthy()
+    host.querySelector('button')!.click()
+    await nextTick()
+    expect(invokes.startLogin).toHaveBeenCalledTimes(2)
+  })
 
   it('starts a deferred login when the hidden menu becomes active', async () => {
     authState.isAuthenticated.value = false

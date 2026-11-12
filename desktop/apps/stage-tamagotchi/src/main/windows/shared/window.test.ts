@@ -1,6 +1,36 @@
-import { describe, expect, it, vi } from 'vitest'
+import type { BrowserWindow } from 'electron'
 
-import { resizeBoundsByDelta, setWindowAlwaysOnTop } from './window'
+import { shell } from 'electron'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { protectPrivilegedWindowNavigation, resizeBoundsByDelta, setWindowAlwaysOnTop } from './window'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.mocked(shell.openExternal).mockClear()
+})
+
+describe('local account navigation guard', () => {
+  it('blocks repeated local authorization navigations and popups without blocking normal web links', () => {
+    vi.stubEnv('VITE_ENABLE_ACCOUNT_LOGIN', undefined)
+    const handlers = new Map<string, (...args: any[]) => void>()
+    let popup!: (details: { url: string }) => { action: string }
+    protectPrivilegedWindowNavigation({ webContents: {
+      getURL: () => 'http://localhost:5173/',
+      on: (name: string, callback: (...args: any[]) => void) => handlers.set(name, callback),
+      setWindowOpenHandler: (callback: typeof popup) => { popup = callback },
+    } } as unknown as BrowserWindow)
+    const preventDefault = vi.fn()
+    for (let i = 0; i < 25; i++) {
+      handlers.get('will-navigate')!({ preventDefault }, 'http://127.0.0.1:3850/api/auth/oauth2/authorize')
+      expect(popup({ url: 'http://localhost:3850/api/auth/oauth2/authorize' }).action).toBe('deny')
+    }
+    expect(preventDefault).toHaveBeenCalledTimes(25)
+    expect(shell.openExternal).not.toHaveBeenCalled()
+    popup({ url: 'https://example.com/help' })
+    expect(shell.openExternal).toHaveBeenCalledExactlyOnceWith('https://example.com/help')
+  })
+})
 
 const mocks = vi.hoisted(() => ({
   isMacOS: false,

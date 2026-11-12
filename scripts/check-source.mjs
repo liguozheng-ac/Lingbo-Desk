@@ -7,12 +7,14 @@ const paths=execFileSync('git',['ls-files','--cached','--others','--exclude-stan
 const denyArg=process.argv.find(a=>a.startsWith('--deny-regex='));
 const deny=denyArg?new RegExp(denyArg.slice('--deny-regex='.length),'i'):null;
 const violations=[];let textFiles=0,bytes=0;
+// The project's original role is a reviewed runtime asset, not a bundled SDK or third-party model.
+const originalModelAssets=new Set(['desktop/packages/stage-ui/src/assets/live2d/models/lingbo-original-b.zip']);
 for(const relative of paths){
  const file=path.join(root,relative);const stat=fs.lstatSync(file);
  if(!stat.isFile()||stat.isSymbolicLink()){violations.push({file:relative,reason:'Only regular source files can be published'});continue;}
  bytes+=stat.size;
  if(stat.size>50*1024*1024)violations.push({file:relative,reason:'Large generated or binary file'});
- if(/(?:^|\/)(?:node_modules|\.local|runs|out|\.git|\.venv)(?:\/|$)|\.(?:dpapi|pfx|pem|sqlite3?|db|exe|dll|moc3?|vrm|zip)$/i.test(relative))violations.push({file:relative,reason:'Private, runtime or locally licensed asset'});
+ if(!originalModelAssets.has(relative)&&/(?:^|\/)(?:node_modules|\.local|runs|out|\.git|\.venv)(?:\/|$)|\.(?:dpapi|pfx|pem|sqlite3?|db|exe|dll|moc3?|vrm|zip)$/i.test(relative))violations.push({file:relative,reason:'Private, runtime or locally licensed asset'});
  const buffer=fs.readFileSync(file);
  if(buffer.includes(0))continue;
  const text=buffer.toString('utf8');textFiles++;

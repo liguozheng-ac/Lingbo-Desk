@@ -55,6 +55,12 @@ export function protectPrivilegedWindowNavigation(window: BrowserWindow): void {
   function openSafeExternalUrl(rawUrl: string): void {
     try {
       const url = new URL(rawUrl)
+      // A renderer fallback must not bypass the main-process login guard and
+      // repeatedly open the local voice gateway as an authorization server.
+      if (import.meta.env.VITE_ENABLE_ACCOUNT_LOGIN !== 'true'
+        && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
+        && /^\/api\/auth(?:\/|$)/.test(url.pathname))
+        return
       if (url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'mailto:')
         void shell.openExternal(url.toString())
     }
