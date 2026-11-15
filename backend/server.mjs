@@ -23,6 +23,8 @@ import { WorkPolicy } from './work-policy.mjs';
 import { WorkTools } from './work-tools.mjs';
 import { WorkBrowser } from './work-browser.mjs';
 import { WorkService } from './work-service.mjs';
+import { readWorkSource } from './work-sources.mjs';
+import { workChatContext } from './work-chat-context.mjs';
 import { DiagnosticLog } from '../runtime/diagnostic-log.mjs';
 import { createSecretRedactor } from '../engine/src/runtime/diagnostic-privacy.js';
 import { EventFeed } from './event-feed.mjs';
@@ -77,7 +79,7 @@ const webReader = new PublicWebReader(path.join(local, 'web-tmp'));
 const workPolicy = new WorkPolicy(local, { protectedPaths: [root, process.env.VOICE_PROGRAM_DIRECTORY].filter(Boolean) });
 const workBrowser = new WorkBrowser(path.join(local, 'work-browser'));
 const workTools = new WorkTools({ policy: workPolicy, personal, skills, webReader, browser: workBrowser });
-const work = new WorkService(path.join(local, 'work-tasks'), { policy: workPolicy, personal, skills, tools: workTools, record, diagnosticsDirectory, workerEnv: job => ({ LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile}/v1`, LINGBO_MODEL_TOKEN: token, WORK_BROKER: `${origin}/work/execute` }) });
+const work = new WorkService(path.join(local, 'work-tasks'), { policy: workPolicy, personal, skills, tools: workTools, sources, record, diagnosticsDirectory, workerEnv: job => ({ LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile}/v1`, LINGBO_MODEL_TOKEN: token, WORK_BROKER: `${origin}/work/execute` }) });
 const tasks = new ReportTaskService(path.join(run, 'tasks'), record, Number(process.env.LINGBO_TASK_HOLD_MS) || 20000, { workspace, storeDirectory: path.join(local, 'tasks'), sources, webReader, legacyRuns: path.join(workspace, 'runs'), workerOptions: job => ({ diagnosticsDirectory, env: { LINGBO_MODEL_GATEWAY: `${origin}/worker/${job.modelProfile || personal.state.model}/v1`, LINGBO_MODEL_TOKEN: token } }) });
 const settingsFile = path.join(local, 'settings.json');
 const loadedSettings = loadSettings(settingsFile);
@@ -147,15 +149,15 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
     const url = new URL(req.url, origin);
-    if (req.method === 'GET' && url.pathname === '/') {
+    if (req.method === 'GET' && ['/', '/workspace'].includes(url.pathname)) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:" });
-      return res.end(fs.readFileSync(path.join(root, 'index.html')));
+      return res.end(fs.readFileSync(path.join(root, url.pathname === '/workspace' ? 'workspace.html' : 'index.html')));
     }
     if (req.method === 'GET' && url.pathname === '/privacy.html') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'" });
       return res.end(fs.readFileSync(path.join(root, 'privacy.html')));
     }
-    if (req.method === 'GET' && ['/dashboard.mjs', '/personal-dashboard.mjs', '/work-dashboard.mjs', '/service-dashboard.mjs', '/client-api.mjs', '/entry.js'].includes(url.pathname)) {
+    if (req.method === 'GET' && ['/workspace.mjs', '/workspace-view.mjs', '/dashboard.mjs', '/personal-dashboard.mjs', '/work-dashboard.mjs', '/service-dashboard.mjs', '/client-api.mjs', '/entry.js'].includes(url.pathname)) {
       res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end(fs.readFileSync(path.join(root, url.pathname.slice(1))));
     }
@@ -254,6 +256,12 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, result);
     }
     if (req.method === 'GET' && url.pathname === '/work/status') return json(res, 200, { jobs: work.list(), permissions: workPolicy.state, warnings: work.warnings });
+    if (req.method === 'GET' && url.pathname.startsWith('/work/source/')) {
+      const parts = url.pathname.split('/');
+      if (parts.length !== 5) throw new Error('来源地址无效');
+      const job = work.find(sessionId, parts[3]);
+      return json(res, 200, readWorkSource(job, parts[4]));
+    }
     if (req.method === 'POST' && url.pathname === '/work/permissions') {
       const value = JSON.parse(await readBody(req, 8192));
       const state = workPolicy.update(value); record({ type: 'work.permissions_changed', at: Date.now(), data: { action: value.action, revision: state.revision } });
@@ -341,7 +349,8 @@ const server = http.createServer(async (req, res) => {
         // no longer an independent model-write path in this integrated product.
         value.tools = value.tools?.filter(t => !['builtIn_readMemory','builtIn_writeMemory','builtIn_forgetMemory', 'computer_use', 'computer_use_read_image'].includes(t.function?.name));
         const context = ['只有本机记忆服务明确返回写入回执，才能声称已持久保存记忆。普通聊天不会自动保存。需要保存时让用户明确说“记住：内容”或使用本机任务台，不编造保存成功。', '当前后台工作统一通过 lingbo_submit_work 提交，lingbo_work_control 查询、暂停、取消、恢复或修改。文件、Office、浏览器和脚本工作使用这个入口，避免绕过任务权限直接操作桌面。工具只返回提交回执时不能说已经完成。高风险动作要在本机任务台确认，不能把聊天中的“好的”解释为某个未展示动作的确认。长期记忆以本条提供的本机个人记忆为准，不自动写入 LINGBO 角色记忆。', personal.context(), selectedSkills.text].filter(Boolean).join('\n');
-        if (context) value.messages = [{ role: 'system', content: context }, ...value.messages];
+        const taskContext = workChatContext(work.list(sessionId), sessionId, { local: profile.id === 'ollama' });
+        if (context || taskContext) value.messages = [{ role: 'system', content: [context, taskContext].filter(Boolean).join('\n\n') }, ...value.messages];
       }
       record({ type: 'model.dispatched', at: Date.now(), data: { sessionId, profile: profile.id, worker: !!workerRoute, outputTokenLimit: models.body(value, profile).max_tokens } });
       models.active++; modelLease = true;

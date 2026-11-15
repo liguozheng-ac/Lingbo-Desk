@@ -5,6 +5,8 @@ import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startStaticRenderer } from './static-renderer.mjs';
 import { packageSettings, gatewayEnvironment } from './package-settings.mjs';
+import { createWorkspaceWindow } from './workspace-window.mjs';
+import { Menu } from 'electron';
 
 const settings = packageSettings(process.resourcesPath, process.env, { testRelease: app.getVersion().includes('-test') });
 fs.mkdirSync(settings.local, { recursive: true });
@@ -26,6 +28,14 @@ else {
   const diagnostics = new DiagnosticLog(launcherDiagnostics);
   let backend, staticServer, setupWindow, quitting = false, exitReady = false, restarts = 0, restartTimer, cleanup;
   const log = (type, data = {}) => diagnostics.append({ type, data });
+  let gatewayReady = false;
+  const workspaceWindow = createWorkspaceWindow({ BrowserWindow, Menu, app, origin: settings.gatewayOrigin, version: app.getVersion(), isClosing: () => quitting, showCharacter: () => {
+    const window = BrowserWindow.getAllWindows().find(w => { try { const url = new URL(w.webContents.getURL()); return url.origin === settings.rendererOrigin && url.searchParams.get('fullscreen-host') === 'main-window'; } catch { return false; } });
+    if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); }
+  } });
+  const openWorkspace = () => { if (gatewayReady && !quitting) void app.whenReady().then(() => workspaceWindow.open()).catch(() => { log('workspace.open_failed'); dialog.showErrorBox('任务工作台暂未打开', '请从聆泊托盘菜单重试；已有任务不会因此被重复提交。'); }); };
+  app.on('lingbo:open-workspace', openWorkspace);
+  app.on('second-instance', openWorkspace);
   const activeMainContents = new WeakSet();
   app.on('web-contents-created', (_event, contents) => {
     contents.on('did-finish-load', () => {
@@ -89,6 +99,8 @@ else {
     staticServer = await startStaticRenderer(path.join(program, 'out/bundle/renderer'), settings.rendererPort, { migration: fs.existsSync(mapping) ? JSON.parse(fs.readFileSync(mapping, 'utf8')) : null, runtime: { gatewayOrigin: settings.gatewayOrigin } });
     log('gateway.started');
     await import('./out/launcher/index.mjs');
+    gatewayReady = true;
+    openWorkspace();
     const startup = await fetch(settings.gatewayOrigin + '/status', { headers: { Authorization: 'Bearer ' + fs.readFileSync(path.join(settings.local, 'gateway-token'), 'utf8').trim() }, signal: AbortSignal.timeout(3000) }).then(r => r.json());
     if (startup.configurationRequired) {
       // Electron emits ready after the entry module's top-level await finishes.

@@ -38,6 +38,7 @@ export class WorkPolicy {
   resolve(job, value = '.', write = false) {
     if (typeof value !== 'string' || !value || value.length > 2000 || /[\x00-\x1f]/.test(value) || value.startsWith('\\\\') || (process.platform === 'win32' && value.slice(2).includes(':'))) throw new Error('文件路径无效');
     const target = realTarget(path.resolve(job.output, value));
+    if (write && job.inputSources?.length && within(path.join(job.output, 'inputs'), target)) throw new Error('上传资料快照只读，请另建产物文件');
     if (this.protectedPaths.some(p => within(p, target)) && !within(job.output, target)) throw new Error('禁止访问程序、凭据或系统目录');
     if (within(job.output, target)) return target;
     const grant = this.state.roots.find(r => job.rootIds.includes(r.id) && within(r.path, target) && (!write || r.mode === 'write'));

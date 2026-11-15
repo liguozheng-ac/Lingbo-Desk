@@ -84,6 +84,10 @@ test('Office creation and spreadsheet edits return real files, hashes and bounde
   const result = await tools.execute(job, 'work_office', { operation: 'edit_xlsx', path: 'result.xlsx', expected_sha256: hashFile(path.join(job.output, 'result.xlsx')), data: JSON.stringify({ sheet: '数据', cells: { B2: 10 } }) }, async () => {}, () => {});
   assert.ok(fs.existsSync(result.value.backup));
   const read = await tools.execute(job, 'work_read', { path: 'result.xlsx' }, () => assert.fail(), () => {}); assert.equal(read.value.sheets[0].rows[1][1], 10);
+  let confirmed = false;
+  const proposed = '# 覆盖报告\n\n这段正文必须可供确认。';
+  await tools.execute(job, 'work_office', { operation: 'create_docx', path: 'result.docx', content: proposed, expected_sha256: hashFile(path.join(job.output, 'result.docx')) }, async preview => { assert.equal(preview.contentPreview, proposed); assert.equal(preview.operation, 'create_docx'); confirmed = true; }, () => {});
+  assert.equal(confirmed, true);
 });
 test('skill resource edits revoke version approval and a selected script runs only after source review', async t => {
   const { job, tools, skills, personal } = fixture(t);

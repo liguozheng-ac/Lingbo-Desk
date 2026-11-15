@@ -4,7 +4,7 @@
 
 A Windows desktop voice agent for continuous conversation, an animated character, and file, Office, and browser tasks that run while you chat.
 
-The current source version and locally verified Windows installation are **0.3.5**. This repository distributes source code; the installer is not publicly distributed. [Changelog](CHANGELOG.md) · [Real-model and voice acceptance (Chinese)](docs/acceptance-0.3.5.md)
+The current source and local Windows installation are **0.3.7**, with a unified character, embedded task workspace and quit command. This update adds session-scoped task context so the character can look up work and uploaded materials. This repository distributes source code; the installer is not publicly distributed. [Changelog](CHANGELOG.md) · [Task context fix (Chinese)](docs/work-chat-context-fix.md)
 
 ## Original Live2D character preview
 
@@ -27,7 +27,9 @@ Character B is integrated into the desktop installation, with automatic blinking
 - Windowed reads and precise edits for long Word documents, plus task recovery checks. [Verification notes](docs/long-documents-and-recovery.md)
 - A Windows portable test build, a pink app icon, service connection checks, and encrypted credential storage. [Packaging notes](docs/windows-test-package.md) · [Configuration and evaluation](docs/service-onboarding-and-real-evaluation.md)
 - Version 0.3.5 integrates historical audio attachment compatibility, local-login loop protection, the window-dragging fix, and the original character. Local installation upgrades and graceful restarts were verified. [Build and upgrade record (Chinese)](docs/release-0.3.5.md)
-- Continuous voice, lip sync, and natural interruption received user confirmation on the current installation. Small real-DeepSeek file, DOCX, and independent-browser cases passed; these are not general success-rate or long-term reliability measurements. [Acceptance scope (Chinese)](docs/acceptance-0.3.5.md)
+- Version 0.3.6 adds an embedded task workspace, read-only source snapshots, traceable artifacts and a whole-app quit command. Human voice/task acceptance on this version remains pending. [Verification record (Chinese)](docs/release-0.3.6.md)
+- Version 0.3.7 adds fresh task context scoped to the current conversation. Real-model cases cover natural task lookup, modification while paused, and session isolation. Human microphone/task acceptance remains pending. [Fix scope (Chinese)](docs/work-chat-context-fix.md)
+- Continuous voice, lip sync, and natural interruption received user confirmation on 0.3.5. Small real-DeepSeek file, DOCX, and independent-browser cases passed; those historical results do not establish human acceptance of the new version, general success rates or long-term reliability. [Acceptance scope (Chinese)](docs/acceptance-0.3.5.md)
 
 ## Architecture
 

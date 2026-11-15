@@ -218,6 +218,9 @@ const setupTrayOnce = once((params: SetupTrayParams): void => {
         ],
       },
       { type: 'separator' },
+      ...app.listenerCount('lingbo:open-workspace') > 0
+        ? [{ label: '任务工作台', click: () => { app.emit('lingbo:open-workspace') } }]
+        : [],
       { label: params.i18n.t('tamagotchi.electron.tray.menu.labels.label.settings'), click: () => void params.settingsWindow.openWindow('/settings') },
       { label: params.i18n.t('tamagotchi.electron.tray.menu.labels.label.about'), click: () => params.aboutWindow().then(window => toggleWindowShow(window)) },
       { type: 'separator' },

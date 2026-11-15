@@ -99,7 +99,7 @@ export class WorkTools {
         signal.throwIfAborted(); this.checkSize(temporary);
         const finalHash = hashFile(temporary);
         if (exists) {
-          await confirm({ tool, path: target, before: args.expected_sha256, after: finalHash, operation: args.operation, oldText: args.old_text, newText: args.new_text, contentPreview: tool === 'work_write' ? args.content : undefined, data: args.data || undefined, detail, warning: '将修改原文件；确认后先保存备份。请关闭该文件的 WPS/Office 编辑窗口，避免未保存内容覆盖结果。' });
+          await confirm({ tool, path: target, before: args.expected_sha256, after: finalHash, operation: args.operation, oldText: args.old_text, newText: args.new_text, contentPreview: tool === 'work_write' || (tool === 'work_office' && args.operation === 'create_docx') ? args.content : undefined, data: args.data || undefined, detail, warning: '将修改原文件；确认后先保存备份。请关闭该文件的 WPS/Office 编辑窗口，避免未保存内容覆盖结果。' });
           this.resolve(job, target, true); this.expected(target, args.expected_sha256);
         }
         signal.throwIfAborted(); const backup = exists ? this.backup(job, target) : null;

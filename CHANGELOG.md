@@ -1,5 +1,32 @@
 # Changelog / 版本更新
 
+## 0.3.7 — 2026-11-16
+
+- 为前台对话加入当前会话的有界工作任务索引，包含状态、版本、要求摘要及已上传资料清单；每次模型请求重新生成，排除其他会话的数据。
+- 引导角色查询已有任务，不因摘要未包含正文而重复索要用户已上传的资料；保留暂停、版本和具体动作确认边界。
+- 139 项后端测试及 3 个真实 DeepSeek 固定案例通过。自然任务查询和“修改但不执行”已进行真实模型验证，仍不等于真人语音端到端验收。
+- Added fresh, bounded, session-scoped task context to foreground model requests. Natural task lookup and paused modification were checked with the real model; execution and approval gates remain in the backend.
+
+[修复与验证范围](docs/work-chat-context-fix.md)
+
+## 0.3.6 — 2026-11-16
+
+### 简体中文
+
+- 新增内置任务工作台，启动应用即可进入；托盘可重开工作台，重复启动复用同一实例。
+- 工作台提供“显示角色与语音入口”和“退出聆泊”菜单，统一角色、任务界面与后端的生命周期。
+- 接入中日文资料上传、只读编号快照、真实执行回执、具体动作确认、暂停改版恢复，以及产物预览和下载。
+- 覆盖创建 Word 文档时展示拟写入正文，便于在确认前审阅。
+- 本机 0.3.6 整包与历史配置兼容检查见 [验证记录](docs/release-0.3.6.md)。新版本真人语音任务联动仍待集中验收。
+
+### English
+
+- Added an embedded task workspace that opens with the app and can be reopened from the tray. Repeated launches reuse the same instance.
+- Added native commands to show the character and quit the whole application, sharing one gateway and lifecycle.
+- Added source uploads, read-only numbered snapshots, actual execution receipts, concrete approvals, pause/change/resume controls, and artifact preview/download.
+- Word replacement approvals now include the proposed document content.
+- See the [local package verification record](docs/release-0.3.6.md). Human voice/task acceptance on this version remains pending; no public installer or GitHub Release is included.
+
 ## 0.3.5 — 2026-11-12
 
 ### 简体中文

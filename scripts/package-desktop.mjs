@@ -14,7 +14,7 @@ if (fs.existsSync(output)) throw new Error('输出目录已存在，请使用新
 const app = path.join(buildRoot, 'desktop/apps/stage-tamagotchi');
 for (const file of ['out/launcher/index.mjs', 'out/bundle/renderer/index.html']) if (!fs.existsSync(path.join(app, file))) throw new Error('请先完成当前源码的桌面构建');
 const manifest = preparePayload({ sourceRoot: root, dependencyRoot: buildRoot, node: input('LINGBO_NODE_RUNTIME'), python: input('LINGBO_PYTHON_RUNTIME'), output: payload });
-for (const file of ['package-bootstrap.mjs', 'package-settings.mjs', 'static-renderer.mjs', 'profile-migration.mjs']) fs.copyFileSync(path.join(root, 'desktop/launcher', file), path.join(app, file));
+for (const file of ['package-bootstrap.mjs', 'package-settings.mjs', 'static-renderer.mjs', 'profile-migration.mjs', 'workspace-window.mjs']) fs.copyFileSync(path.join(root, 'desktop/launcher', file), path.join(app, file));
 const require = createRequire(path.join(app, 'package.json'));
 const builder = process.env.LINGBO_BUILDER_CLI || require.resolve('electron-builder/out/cli/cli.js');
 const result = spawnSync(process.execPath, [builder, '--projectDir', app, '--config', path.join(root, 'scripts/package-desktop.config.cjs'), '--win', '--x64', ...(target === 'dir' ? ['--dir'] : [])], { cwd: app, stdio: 'inherit', windowsHide: true, env: { ...process.env, npm_config_user_agent: 'pnpm/11.24.0', npm_execpath: process.env.LINGBO_PNPM_CLI, LINGBO_PACKAGE_PAYLOAD: payload, LINGBO_PACKAGE_OUTPUT: path.join(output, 'package'), CSC_IDENTITY_AUTO_DISCOVERY: 'false' } });
