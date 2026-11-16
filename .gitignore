@@ -51,3 +51,6 @@ desktop/apps/stage-tamagotchi/workspace-window.mjs
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Generated opt-in input monitor copy
+desktop/apps/stage-tamagotchi/chat-input-monitor.mjs

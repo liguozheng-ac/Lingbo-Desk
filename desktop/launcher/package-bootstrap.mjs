@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startStaticRenderer } from './static-renderer.mjs';
 import { packageSettings, gatewayEnvironment } from './package-settings.mjs';
 import { createWorkspaceWindow } from './workspace-window.mjs';
+import { installChatInputMonitor } from './chat-input-monitor.mjs';
 import { Menu } from 'electron';
 
 const settings = packageSettings(process.resourcesPath, process.env, { testRelease: app.getVersion().includes('-test') });
@@ -26,6 +27,7 @@ else {
   // separate from the gateway process so neither prunes the other's active log.
   const launcherDiagnostics = path.join(settings.diagnostics, 'launcher');
   const diagnostics = new DiagnosticLog(launcherDiagnostics);
+  const stopInputMonitor = process.env.LINGBO_INPUT_DIAGNOSTICS === '1' ? installChatInputMonitor({ app, BrowserWindow, rendererOrigin: settings.rendererOrigin, record: event => diagnostics.append(event) }) : () => {};
   let backend, staticServer, setupWindow, quitting = false, exitReady = false, restarts = 0, restartTimer, cleanup;
   const log = (type, data = {}) => diagnostics.append({ type, data });
   let gatewayReady = false;
@@ -68,7 +70,7 @@ else {
       let failed = false;
       try { const exit = await backend?.stop(); if (exit && (exit.error || exit.code !== 0)) failed = true; } catch { failed = true; }
       if (staticServer) { staticServer.closeAllConnections(); await new Promise(resolve => staticServer.close(resolve)); }
-      log('gateway.closed', { ok: !failed }); diagnostics.close();
+      stopInputMonitor(); log('gateway.closed', { ok: !failed }); diagnostics.close();
       if (failed) throw new Error('后端进程未能确认关闭，请检查诊断记录。');
     })();
     return cleanup;

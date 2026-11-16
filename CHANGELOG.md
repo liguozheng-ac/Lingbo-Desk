@@ -1,5 +1,12 @@
 # Changelog / 版本更新
 
+## Unreleased — 2026-11-17
+
+- 新增可选的聊天输入监测，默认关闭；仅记录受限计数、延迟及窗口生命周期事件，不记录输入正文。补齐启动器、打包清单与隐私过滤测试。
+- 补充[聊天卡顿排查记录](docs/chat-input-investigation.md)和[后台文字联测记录](docs/headless-text-verification.md)：11 个真实模型固定检查，以及 69 项对话运行时、7 项打断逻辑模拟测试，分别标明验证边界。
+- 本批是源码与验证记录更新，不是安装版升级。桌面卡顿和空白窗口原因仍未确定；模型完成说明与后台状态不一致的样本尚未修复。尚未实现新的共享 Skills 包。
+- Added opt-in, metadata-only chat input diagnostics and scoped validation records. Desktop responsiveness remains unresolved; this update does not ship a new installer.
+
 ## 0.3.7 — 2026-11-16
 
 - 为前台对话加入当前会话的有界工作任务索引，包含状态、版本、要求摘要及已上传资料清单；每次模型请求重新生成，排除其他会话的数据。
