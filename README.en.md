@@ -49,6 +49,8 @@ The local installation remains **0.3.7**. Newer source includes input diagnostic
 
 [**▶ Open the actual task demo (about one minute, silent)**](docs/media/lingbo-workflow-demo.webm)
 
+Download the video from its GitHub file page and open it in a browser to play.
+
 Upload sources, run a background task, pause and revise it, then inspect the generated summary and Word download. The edit uses a roughly 153-second recording, omitting the middle sequence of individual approvals and marking that omission with a title card. Approval screens containing local paths are not published. **This is text-operated, real-model execution, not a voice demo or a task-duration benchmark.** [Editing and validation scope](docs/homepage-showcase.md)
 
 ## From a request to reviewable deliverables
