@@ -6,7 +6,8 @@ export class VoiceMetrics {
   captureNative(data) {
     const item = {};
     for (const key of ['type', 'sessionId', 'turnId', 'segmentId', 'requestId', 'status', 'track', 'spanId', 'clock']) if (typeof data?.[key] === 'string' && data[key].length <= 200) item[key] = data[key];
-    for (const key of ['at', 'wall', 'ts', 'observedTs', 'targets', 'bytes', 'firstTokenMs']) if (Number.isFinite(data?.[key])) item[key] = data[key];
+    for (const key of ['at', 'wall', 'ts', 'observedTs', 'targets', 'bytes', 'firstTokenMs', 'audioFrame', 'detectorWindows', 'speechWindows', 'detectorAgeMs']) if (Number.isFinite(data?.[key])) item[key] = data[key];
+    for (const key of ['speaking', 'echoCancellation', 'captureHeld', 'recording', 'listenerError']) if (typeof data?.[key] === 'boolean') item[key] = data[key];
     if (!item.type) return;
     this.native.push(item); if (this.native.length > 1500) this.native.shift();
   }

@@ -570,7 +570,10 @@ export const useVoiceStore = defineStore('voice', () => {
       // A capture lease, for example a voiceprint enrollment, records speech that can contain a wake word. It must not start an input.
       // A muted call also stops here, which cancels the speech that it was capturing.
       enabled: () => !voiceMessages.isRecording && !captureLease.held && (!callActive.value || !callMuted.value),
-      silenceMs: () => hearing.endJudgeEnabled ? VOICE_END_SILENCE.pauseMs + VOICE_END_SILENCE.graceMs : VOICE_END_SILENCE.pauseMs,
+      // Buffered ASR has no text until capture ends. A text judge cannot shorten that wait, so do not add its grace.
+      silenceMs: () => hearing.endJudgeEnabled && transcript.value?.raw.text.trim()
+        ? VOICE_END_SILENCE.pauseMs + VOICE_END_SILENCE.graceMs
+        : VOICE_END_SILENCE.pauseMs,
       // Automatic barge-in requires platform echo cancellation or an external echo classifier.
       acceptSpeech: options.acceptSpeech ?? (async () => !speaking.nowSpeaking || devices.source.echoCancellation),
       // Wake word mode returns no target, so VAD alone cannot start an input. A wake supplies its own target.

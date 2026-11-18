@@ -1,5 +1,5 @@
 export const DEFAULT_TTS_PROVIDER = 'doubao'
-export const DEFAULT_DOUBAO_VOICE_ID = 'zh_male_m191_uranus_bigtts'
+export const DEFAULT_DOUBAO_VOICE_ID = 'zh_female_vv_uranus_bigtts'
 export const DEFAULT_DOUBAO_SPEECH_RATE = 20
 
 export function normalizeDoubaoSpeechRate(value, fallback = DEFAULT_DOUBAO_SPEECH_RATE) {

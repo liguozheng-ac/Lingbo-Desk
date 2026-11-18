@@ -105,6 +105,8 @@ export const useAuthStore = defineStore('auth', () => {
   // The leader owns this cross-window login request. Web consumes it locally;
   // Electron renderers compete to consume it before starting the IPC flow.
   const needsLogin = ref(false)
+  // Local desktop providers do not require the optional hosted account service.
+  const accountLoginEnabled = !isStageTamagotchi() || import.meta.env.VITE_ENABLE_ACCOUNT_LOGIN === 'true'
   const { isMobile } = useBreakpoints()
 
   whenever(needsLogin, async () => {
@@ -397,6 +399,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** Grants one renderer ownership of a shared login request. */
   async function consumeLoginRequest(): Promise<boolean> {
+    if (!accountLoginEnabled) {
+      needsLogin.value = false
+      return false
+    }
     if (!needsLogin.value || isAuthenticated.value)
       return false
     needsLogin.value = false
@@ -405,6 +411,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** Publishes a login request on the leader before any renderer can consume it. */
   async function requestLogin(): Promise<void> {
+    if (!accountLoginEnabled) {
+      needsLogin.value = false
+      return
+    }
     if (isAuthenticated.value)
       return
     needsLogin.value = true
@@ -416,7 +426,7 @@ export const useAuthStore = defineStore('auth', () => {
       return
     sessionVersion.value += 1
     clearAuthState()
-    needsLogin.value = true
+    needsLogin.value = accountLoginEnabled
   }
 
   const updateCredits = async () => {

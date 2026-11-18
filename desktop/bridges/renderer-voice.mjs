@@ -12,6 +12,9 @@ export function attachVoiceDiagnostics(pinia, report) {
   const firstTokens = new Set()
   let subscription
   let disposed = false
+  let detectorWindows = 0
+  let speechWindows = 0
+  let lastDetectorAt = 0
   const context = getSpeechBusContext()
   const state = { events, traceReady: false, lastError: null }
   window.__voiceDiagnostics = state
@@ -86,9 +89,19 @@ export function attachVoiceDiagnostics(pinia, report) {
     if (message.kind !== 'record')
       return
     const record = message.record
+    if (record.type === 'sample.chunk' && record.track === 'participants/user/input') {
+      const probabilities = record.values?.probability || []
+      detectorWindows += probabilities.length
+      speechWindows += probabilities.filter(value => value >= 0.6).length
+      if (probabilities.length)
+        lastDetectorAt = Date.now()
+      return
+    }
     if (!['span.begin', 'span.end', 'instant'].includes(record.type))
       return
     const safe = { type: record.type, track: record.track, spanId: record.spanId, ts: record.ts, clock: record.clock, observedTs: record.observedTs, status: record.status, turnId: record.ids?.turn, sessionId: record.ids?.conversation }
+    if (record.reason === 'Speech segment was too short')
+      safe.status = 'speech-too-short'
     if (record.track?.endsWith('/llm') && Number.isFinite(record.attrs?.['llm.ttft_ms']))
       safe.firstTokenMs = record.attrs['llm.ttft_ms']
     void report('voice.trace', safe)
@@ -101,6 +114,25 @@ export function attachVoiceDiagnostics(pinia, report) {
       state.traceReady = true
     })
     .catch((error) => { state.lastError = error.message })
+  // Observe the listener independently of a chat turn. No audio, transcript or device ID leaves the window.
+  const listenerTimer = setInterval(() => {
+    const voice = pinia._s.get('voice')
+    const devices = pinia._s.get('settings-audio-devices')
+    if (!voice || !devices?.listening)
+      return
+    mark('listener.health', undefined, {
+      status: voice.controller.activeInput?.state.phase || 'idle',
+      audioFrame: voice.controller.audio?.position?.frame || 0,
+      detectorWindows,
+      speechWindows,
+      detectorAgeMs: lastDetectorAt ? Date.now() - lastDetectorAt : -1,
+      speaking: !!pinia._s.get('character-speaking')?.nowSpeaking,
+      echoCancellation: !!devices.source?.echoCancellation,
+      captureHeld: !!pinia._s.get('voice-capture-lease')?.held,
+      recording: !!pinia._s.get('voice-messages')?.isRecording,
+      listenerError: !!voice.error,
+    })
+  }, 5000)
   return {
     stampTurn,
     async stop(request) {
@@ -122,6 +154,7 @@ export function attachVoiceDiagnostics(pinia, report) {
     },
     close() {
       disposed = true
+      clearInterval(listenerTimer)
       removeToken()
       removeOutput()
       subscription?.unsubscribe()

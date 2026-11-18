@@ -34,6 +34,15 @@ test('buffered ASR preserves every PCM packet and finishes only after provider c
   assert.ok(Buffer.concat(received).equals(pcm)); assert.equal(text, '最终文本'); assert.equal(closed, true);
 });
 
+test('listener health keeps only bounded metadata and excludes microphone content', () => {
+  const metrics = new VoiceMetrics();
+  metrics.captureNative({ type: 'listener.health', status: 'idle', audioFrame: 16000, detectorWindows: 31, speechWindows: 2, detectorAgeMs: 20, speaking: false, echoCancellation: true, captureHeld: false, recording: false, listenerError: false, samples: [0.5], transcript: 'private words', deviceId: 'private device', apiKey: 'private key' });
+  assert.equal(metrics.native[0].detectorWindows, 31);
+  assert.equal(metrics.native[0].echoCancellation, true);
+  assert.ok(!JSON.stringify(metrics.native).includes('private'));
+  assert.equal('samples' in metrics.native[0], false);
+});
+
 test('aborted upload closes ASR without flushing pending audio', async () => {
   const controller = new AbortController(); let flushed = false; let sent = 0; let closed = false;
   await assert.rejects(recognizeFile(Buffer.alloc(32000), 'en', { delivery: 'paced', signal: controller.signal,

@@ -10,6 +10,8 @@ import { AutoModel, PretrainedConfig, Tensor } from '@huggingface/transformers'
 export class SileroVadModel {
   private readonly model: Promise<PreTrainedModel>
   private state = new Tensor('float32', new Float32Array(256), [2, 1, 128])
+  // Silero's ONNX wrapper prepends the previous 64 samples at 16 kHz.
+  private context = new Float32Array(64)
   private readonly sampleRate = new Tensor('int64', [16000], [])
   private processing: Promise<unknown> = Promise.resolve()
   private closed = false
@@ -28,17 +30,24 @@ export class SileroVadModel {
       signal?.throwIfAborted()
       if (this.closed)
         throw new Error('VAD model is closed')
+      if (samples.length !== 512)
+        throw new Error('Silero VAD requires 512 new samples at 16 kHz')
       const model = await this.model
       signal?.throwIfAborted()
       if (reset) {
         this.state.dispose()
         this.state = new Tensor('float32', new Float32Array(256), [2, 1, 128])
+        this.context.fill(0)
       }
-      const input = new Tensor('float32', samples, [1, samples.length])
+      const window = new Float32Array(this.context.length + samples.length)
+      window.set(this.context)
+      window.set(samples, this.context.length)
+      const input = new Tensor('float32', window, [1, window.length])
       try {
         const result = await model({ input, sr: this.sampleRate, state: this.state })
         this.state.dispose()
         this.state = result.stateN
+        this.context.set(samples.subarray(samples.length - this.context.length))
         const score = Number(result.output.data[0])
         result.output.dispose()
         return score
