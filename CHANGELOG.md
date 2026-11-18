@@ -1,5 +1,12 @@
 # Changelog / 版本更新
 
+## 0.3.8 — 2026-11-19
+
+- 窗口边界只在位置或尺寸改变时发送，页面重载时补发快照，减少静止窗口的重复 IPC；没有据此宣布历史卡顿或空白窗口已解决。
+- 统一打包近期的连续语音、默认女声、本地账号模式和报告排版/数字约束修复；云服务凭据继续只保存在用户本机。
+- 18 项窗口逻辑、32 项相关后端、11 项语音及账号模式测试通过；整包另经 11 项本地模拟模型受控检查，不代表真实模型业务成功率。
+- Coalesced unchanged window-bounds updates and consolidated recent voice, local-mode and report fixes into one Windows build. Desktop responsiveness still requires human acceptance; see [verification scope](docs/release-0.3.8.md).
+
 ## Unreleased — 2026-11-17
 
 - 重组中英文项目主页，补充品牌横幅、真实工作流程、产品设计与源码入口；加入约一分钟的静音任务剪辑及素材范围说明。仓库 Topics 与主页关键词覆盖 Agent、语音、桌面自动化和现有技术栈；不改变产品功能或安装版。

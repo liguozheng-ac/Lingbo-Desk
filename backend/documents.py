@@ -2,6 +2,7 @@
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -54,6 +55,19 @@ def export(source, output, manifest=None, audit=None):
     section.page_width, section.page_height = Cm(21), Cm(29.7)
     section.top_margin = section.bottom_margin = Cm(2.2)
     section.left_margin = section.right_margin = Cm(2.5)
+    # The bundled python-docx template contains legacy Courier references, even in unused styles.
+    for fonts in document.styles.element.xpath('.//w:rFonts'):
+        for attribute, value in list(fonts.attrib.items()):
+            if value == 'Courier':
+                fonts.set(attribute, 'Courier New')
+    for part in document.part.related_parts.values():
+        if str(part.partname) == '/word/fontTable.xml':
+            from lxml import etree
+            root = etree.fromstring(part.blob)
+            for font in root:
+                if font.get(qn('w:name')) == 'Courier':
+                    font.set(qn('w:name'), 'Courier New')
+            part._blob = etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone=True)
     for name, size in [('Normal', 11), ('Title', 22), ('Heading 1', 16), ('Heading 2', 13), ('Heading 3', 12)]:
         style = document.styles[name]
         style.font.name = 'Microsoft YaHei'
@@ -66,18 +80,54 @@ def export(source, output, manifest=None, audit=None):
             border.getparent().remove(border)
     title_added = False
     table_rows = []
+    def inline(paragraph, text):
+        for index, part in enumerate(re.split(r'\*\*(.*?)\*\*', text)):
+            run = paragraph.add_run(part.replace('`', ''))
+            run.bold = bool(index % 2)
+    def text_width(text):
+        return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in text)
     def flush_table():
         if not table_rows:
             return
+        # Full hashes are provenance, not comparison values. Keep them verbatim in full-width paragraphs.
+        hashes = [row for row in table_rows[1:] if len(row) > 1 and all(re.fullmatch(r'[a-fA-F0-9]{64}', text.strip('` ')) for text in row[1:])]
+        rows = [row for row in table_rows if row not in hashes]
         columns = max(len(row) for row in table_rows)
         table = document.add_table(rows=0, cols=columns)
-        table.autofit = True
-        for index, row in enumerate(table_rows):
+        table.autofit = False
+        available = section.page_width - section.left_margin - section.right_margin
+        scores = [max(6, min(36, max(text_width(row[column]) if column < len(row) else 0 for row in rows))) for column in range(columns)]
+        header_sizes = [text_width(rows[0][column]) if column < len(rows[0]) else 0 for column in range(columns)]
+        minimums = [Cm(max(1.2, min(3, 1 + 0.14 * size))) for size in header_sizes]
+        if sum(minimums) >= available:
+            widths = [int(available / columns)] * columns
+        else:
+            extra = available - sum(minimums)
+            widths = [int(minimum + extra * score / sum(scores)) for minimum, score in zip(minimums, scores)]
+        widths[-1] += available - sum(widths)
+        for column, width in zip(table.columns, widths):
+            column.width = width
+        for index, row in enumerate(rows):
             cells = table.add_row().cells
             for column, text in enumerate(row):
-                cells[column].text = text
-            for cell in cells:
+                inline(cells[column].paragraphs[0], text)
+            tr_properties = table.rows[-1]._tr.get_or_add_trPr()
+            if index == 0:
+                tr_properties.append(OxmlElement('w:tblHeader'))
+            if all(len(text) < 200 for text in row):
+                tr_properties.append(OxmlElement('w:cantSplit'))
+            for column, cell in enumerate(cells):
+                cell.width = widths[column]
                 cell.vertical_alignment = 1
+                for paragraph in cell.paragraphs:
+                    paragraph.paragraph_format.space_before = Pt(0)
+                    paragraph.paragraph_format.space_after = Pt(3)
+                    paragraph.paragraph_format.line_spacing = 1.1
+                    paragraph.paragraph_format.keep_with_next = index == 0
+                    for run in paragraph.runs:
+                        run.font.size = Pt(10.5)
+                        if index == 0:
+                            run.bold = True
                 properties = cell._tc.get_or_add_tcPr()
                 shading = OxmlElement('w:shd')
                 shading.set(qn('w:fill'), 'E8EEF5' if index == 0 else 'FFFFFF')
@@ -97,7 +147,18 @@ def export(source, output, manifest=None, audit=None):
                     margins.append(margin)
                 properties.append(margins)
         table_rows.clear()
-        document.add_paragraph()
+        gap = document.add_paragraph()
+        gap.paragraph_format.space_after = Pt(3)
+        gap.paragraph_format.line_spacing = 1
+        gap.add_run().font.size = Pt(2)
+        for row in hashes:
+            for column, value in enumerate(row[1:], 1):
+                label = rows[0][column] if column < len(rows[0]) else str(column)
+                paragraph = document.add_paragraph(f'{row[0].strip("` ")} · {label}：{value.strip("` ")}')
+                paragraph.paragraph_format.space_after = Pt(4)
+                paragraph.paragraph_format.line_spacing = 1.1
+                for run in paragraph.runs:
+                    run.font.size = Pt(9)
     for line in source.read_text(encoding='utf-8').splitlines():
         line = line.strip()
         if not line or re.fullmatch(r'[-*_]{3,}', line):
@@ -111,7 +172,6 @@ def export(source, output, manifest=None, audit=None):
         heading = re.match(r'^(#{1,6})\s+(.*)', line)
         if heading:
             text = re.sub(r'[*_`]', '', heading[2])
-            text = re.sub(r'[^\w\s\u3000-\u9fff]', ' ', text).strip()
             if len(heading[1]) == 1 and not title_added:
                 document.add_paragraph(text, 'Title')
                 title_added = True
@@ -119,9 +179,7 @@ def export(source, output, manifest=None, audit=None):
                 document.add_heading(text, min(max(len(heading[1]) - 1, 1), 3))
             continue
         paragraph = document.add_paragraph()
-        for index, part in enumerate(re.split(r'\*\*(.*?)\*\*', line)):
-            run = paragraph.add_run(part.replace('`', ''))
-            run.bold = bool(index % 2)
+        inline(paragraph, line)
         paragraph.paragraph_format.widow_control = True
     flush_table()
     if audit:

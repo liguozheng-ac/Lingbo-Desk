@@ -38,10 +38,17 @@ export function createWindowService(params: {
     params.context.emit(electronWindowLifecycleChanged, getWindowLifecycleState(reason))
   }
 
+  // A stationary window needs no repeated IPC dispatch on the renderer's input thread.
+  let sentBounds: Rectangle | undefined
   const { start, stop } = createRendererLoop({
     window: params.window,
     run: () => {
-      params.context.emit(bounds, params.window.getBounds())
+      const current = params.window.getBounds()
+      if (sentBounds?.x === current.x && sentBounds?.y === current.y
+        && sentBounds?.width === current.width && sentBounds?.height === current.height)
+        return
+      sentBounds = { ...current }
+      params.context.emit(bounds, current)
     },
   })
 
@@ -52,7 +59,11 @@ export function createWindowService(params: {
     offAllClosed()
     offBeforeQuit()
   })
-  defineInvokeHandler(params.context, startLoopGetBounds, () => start())
+  defineInvokeHandler(params.context, startLoopGetBounds, () => {
+    // A reloaded page has no snapshot, even if the native window never moved.
+    sentBounds = undefined
+    start()
+  })
   defineInvokeHandler(params.context, electronGetWindowLifecycleState, (_, options) => {
     if (params.window.webContents.id === options?.raw.ipcMainEvent.sender.id)
       return getWindowLifecycleState('snapshot')
