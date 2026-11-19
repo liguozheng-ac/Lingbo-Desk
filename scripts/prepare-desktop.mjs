@@ -6,7 +6,7 @@ const desktop=path.join(root,'desktop'),app=path.join(desktop,'apps/stage-tamago
 const core=process.env.LIVE2D_CORE_PATH || path.join(root,'resources/local/live2dcubismcore.min.js');
 if(!fs.existsSync(core)) throw new Error('请按 docs/setup.md 导入本人已接受条款的 Cubism Core，并设置 LIVE2D_CORE_PATH。');
 const bridge=path.join(app,'src/renderer/bridges');fs.mkdirSync(bridge,{recursive:true});
-for(const [source,target] of Object.entries({'renderer-bridge.mjs':'lingbo-integration.mjs','renderer-voice.mjs':'lingbo-voice.mjs','commands.mjs':'lingbo-commands.mjs','speech-targets.mjs':'lingbo-speech-targets.mjs','work-schema.mjs':'lingbo-work-schema.mjs'}))fs.copyFileSync(path.join(desktop,'bridges',source),path.join(bridge,target));
+for(const [source,target] of Object.entries({'renderer-bridge.mjs':'lingbo-integration.mjs','renderer-voice.mjs':'lingbo-voice.mjs','commands.mjs':'lingbo-commands.mjs','speech-targets.mjs':'lingbo-speech-targets.mjs','work-schema.mjs':'lingbo-work-schema.mjs','task-notices.mjs':'lingbo-task-notices.mjs'}))fs.copyFileSync(path.join(desktop,'bridges',source),path.join(bridge,target));
 fs.copyFileSync(path.join(desktop,'bridges/computer-use-runtime-patch.mjs'),path.join(app,'computer-use-runtime-patch.mjs'));
 fs.copyFileSync(path.join(desktop,'bridges/desktop-config.ts.template'),path.join(app,'electron-integration.config.ts'));
 for(const name of ['package-bootstrap.mjs','package-settings.mjs','static-renderer.mjs','profile-migration.mjs','workspace-window.mjs', 'chat-input-monitor.mjs'])fs.copyFileSync(path.join(desktop,'launcher',name),path.join(app,name));

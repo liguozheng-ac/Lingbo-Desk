@@ -72,6 +72,8 @@ export class VoiceController {
   private audioInput: AudioInput | undefined
   private closing: Promise<void> | undefined
   private readonly responses = new Map<string, VoiceResponse>()
+  /** Playback is ordered across turns, not just within each response. Input and synthesis stay independent. */
+  private readonly playbackTails = new Map<string, Promise<unknown>>()
   /**
    * Turn keys stay here after their response closes, so a late producer cannot reopen finished speech.
    * The set holds one short key per turn and clears when the controller closes.
@@ -234,7 +236,19 @@ export class VoiceController {
     if (!this.options.speech)
       throw new Error('Speech output is not configured')
 
-    const response = new VoiceResponse(turn, this.options.speech(turn), () => this.responses.delete(key))
+    const previous = this.playbackTails.get(turn.sessionId) ?? Promise.resolve()
+    const closed = Promise.withResolvers<void>()
+    const response = new VoiceResponse(turn, this.options.speech(turn), () => {
+      this.responses.delete(key)
+      closed.resolve()
+    }, previous)
+    // Cancelling a queued response must not release the earlier response's slot.
+    const tail = Promise.all([previous, closed.promise])
+    this.playbackTails.set(turn.sessionId, tail)
+    void tail.then(() => {
+      if (this.playbackTails.get(turn.sessionId) === tail)
+        this.playbackTails.delete(turn.sessionId)
+    })
     this.usedTurns.add(key)
     this.responses.set(key, response)
     return response

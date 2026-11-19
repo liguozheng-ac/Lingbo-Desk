@@ -6,7 +6,7 @@ import path from 'node:path';
 import { loadWorkSources, writeWorkSources, readWorkSource, verifyWorkSources } from '../work-sources.mjs';
 import { WorkPolicy } from '../work-policy.mjs';
 import { WorkService } from '../work-service.mjs';
-import { taskView, approvalView, reportRequest } from '../workspace-view.mjs';
+import { taskView, approvalView, reportRequest, exportedFiles } from '../workspace-view.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lingbo-workspace-'));
@@ -70,4 +70,16 @@ test('workbench progress requires actual successful receipts and never promotes 
   assert.equal(approvalView({ contentPreview: '# 拟写入正文', path: 'x.docx' }).after, '# 拟写入正文');
   assert.match(reportRequest('比较两份资料', true), /日文摘要/);
   assert.doesNotMatch(reportRequest('比较两份资料', false), /以及日文摘要/);
+});
+
+test('export confirmation and result cards show approved destinations from current successful receipts only', () => {
+  const approval = approvalView({ tool: 'work_export', path: 'source.md', destination: 'reviewed(1).md', sha256: 'a'.repeat(64), warning: '仅复制' });
+  assert.equal(approval.title, '导出已有任务产物'); assert.equal(approval.target, 'reviewed(1).md'); assert.match(approval.before, /source.md/); assert.match(approval.after, /reviewed\(1\)/);
+  const receipts = [
+    { tool: 'work_export', ok: true, mutation: true, version: 1, path: 'old.md', sha256: 'a'.repeat(64) },
+    { tool: 'work_export', ok: false, mutation: true, version: 2, path: 'failed.md', sha256: 'a'.repeat(64) },
+    { tool: 'work_export', ok: true, mutation: true, version: 2, path: 'current.md', sha256: 'b'.repeat(64) },
+  ];
+  const task = { version: 2, receipts }; assert.deepEqual(exportedFiles(task), [{ path: 'current.md', name: 'current.md', sha256: 'b'.repeat(64) }]);
+  assert.equal(taskView(task).phases[2].done, true);
 });

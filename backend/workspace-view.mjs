@@ -2,8 +2,13 @@ export const statusLabels = { starting: '准备开始', running: '正在执行',
 export const terminalStates = new Set(['completed', 'failed', 'cancelled', 'paused', 'interrupted']);
 const basename = value => String(value || '').replaceAll('\\', '/').split('/').at(-1) || '文件';
 export const fileName = basename;
-const readTools = new Set(['work_read', 'work_web_read', 'work_browser', 'work_list']);
-const fileTools = new Set(['work_write', 'work_edit', 'work_office', 'work_move', 'work_copy']);
+export function exportedFiles(task) {
+  const files = new Map();
+  for (const r of task?.receipts || []) if (r.ok && r.mutation && r.version === task.version && r.tool === 'work_export' && r.path && r.sha256) files.set(r.path, { path: r.path, name: basename(r.path), sha256: r.sha256 });
+  return [...files.values()];
+}
+const readTools = new Set(['work_read', 'work_web_read', 'work_browser', 'work_list', 'work_artifacts']);
+const fileTools = new Set(['work_write', 'work_edit', 'work_office', 'work_move', 'work_copy', 'work_export']);
 
 export function taskView(task) {
   if (!task) return null;
@@ -31,7 +36,8 @@ export function taskView(task) {
 
 export function approvalView(approval) {
   if (!approval) return null;
-  const titles = { work_edit: '修改原有文件', work_write: '替换原有文件', work_office: '更新 Office 文档', work_move: '移动文件', work_delete: '移入备份区', work_browser: '操作网页', work_skill: '运行技能脚本' };
+  const titles = { work_export: '导出已有任务产物', work_edit: '修改原有文件', work_write: '替换原有文件', work_office: '更新 Office 文档', work_move: '移动文件', work_delete: '移入备份区', work_browser: '操作网页', work_skill: '运行技能脚本' };
+  if (approval.tool === 'work_export') return { title: titles.work_export, target: approval.destination, before: `来源：${approval.path}\nSHA256：${approval.sha256}`, after: `复制到：${approval.destination}`, warning: approval.warning };
   return { title: titles[approval.tool] || '执行需要确认的动作', target: approval.path || approval.url || approval.file || '查看下方完整操作信息', before: approval.oldText ?? (approval.contentPreview !== undefined ? '将替换既有文件。当前文件的 SHA256 可在完整动作中核对。' : undefined), after: approval.newText ?? approval.contentPreview, warning: approval.warning || '确认仅对应当前这一项动作。' };
 }
 

@@ -10,6 +10,111 @@ import { VoiceController } from '../../index'
 import { keepOpen, pcmSource } from '../../testing/audio'
 
 describe('voiceController output', () => {
+  it('user interruption cancels queued speech and admits a fresh reply after physical silence', async () => {
+    const audioDone = Promise.withResolvers<{ throughMs: number }>()
+    const stopped = Promise.withResolvers<{ throughMs: number }>()
+    const played: string[] = [], requested: string[] = []
+    const playback = new Playback({ nowMs: () => 0, play: clip => {
+      clip.onStart?.()
+      const done = (clip.audio as Blob).text().then(text => {
+        played.push(text)
+        return text === 'Old.' ? audioDone.promise : { throughMs: 1 }
+      })
+      return { done, stop: () => stopped.promise }
+    } })
+    const controller = new VoiceController({ fadeMs: 0, speech: () => ({ playback, synthesize: async request => { requested.push(request.text); return new Blob([request.text]) } }) })
+    try {
+      const oldTurn = { sessionId: 'owner', turnId: 'old' }
+      const queuedTurn = { sessionId: 'owner', turnId: 'queued' }
+      const old = controller.openResponse(oldTurn), queued = controller.openResponse(queuedTurn)
+      const a = old.openSpeech({ purpose: 'answer' }); await a.write('Old.'); a.end()
+      await expect.poll(() => played).toEqual(['Old.'])
+      const b = queued.openSpeech({ purpose: 'answer' }); await b.write('Obsolete.'); b.end()
+      await expect.poll(() => requested).toContain('Obsolete.')
+      const interrupted = controller.interrupt({ turns: [oldTurn, queuedTurn], cause: 'speech-input' })
+      const fresh = controller.openResponse({ sessionId: 'owner', turnId: 'fresh' })
+      const c = fresh.openSpeech({ purpose: 'answer' }); await c.write('Fresh.'); c.end()
+      const done = fresh.finish()
+      await expect.poll(() => requested).toContain('Fresh.')
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(played).toEqual(['Old.'])
+      stopped.resolve({ throughMs: 2 }); audioDone.resolve({ throughMs: 2 })
+      await interrupted.silenced
+      await Promise.all([old.finish(), queued.finish(), done])
+      expect(played).toEqual(['Old.', 'Fresh.'])
+    }
+    finally { stopped.resolve({ throughMs: 2 }); audioDone.resolve({ throughMs: 2 }); await controller.close() }
+  })
+
+  it('holds a later turn until the earlier turn finishes actual playback', async () => {
+    const firstDone = Promise.withResolvers<void>()
+    const played: string[] = [], requested: string[] = []
+    const playback = new Playback({ nowMs: () => 0, play: clip => {
+      clip.onStart?.()
+      return {
+        done: (clip.audio as Blob).text().then(async text => {
+          played.push(text)
+          if (text === 'First.') await firstDone.promise
+          return { throughMs: 10 }
+        }),
+        stop: async () => { firstDone.resolve(); return { throughMs: 0 } },
+      }
+    } })
+    const controller = new VoiceController({ speech: () => ({ playback, synthesize: async request => { requested.push(request.text); return new Blob([request.text]) } }) })
+    try {
+      const first = controller.openResponse({ sessionId: 'owner', turnId: 'first' })
+      const a = first.openSpeech({ purpose: 'answer' }); await a.write('First.'); a.end()
+      const firstFinished = first.finish()
+      await expect.poll(() => played).toEqual(['First.'])
+      const second = controller.openResponse({ sessionId: 'owner', turnId: 'notice' })
+      const b = second.openSpeech({ purpose: 'answer' }); await b.write('Second.'); b.end()
+      const secondFinished = second.finish()
+      await expect.poll(() => requested).toContain('Second.')
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(played).toEqual(['First.'])
+      firstDone.resolve()
+      await Promise.all([firstFinished, secondFinished])
+      expect(played).toEqual(['First.', 'Second.'])
+    }
+    finally { firstDone.resolve(); await controller.close() }
+  })
+
+  it('cancelling a queued turn cannot let the next turn bypass audio that is still playing', async () => {
+    const firstDone = Promise.withResolvers<void>()
+    const played: string[] = [], requested: string[] = []
+    const playback = new Playback({ nowMs: () => 0, play: clip => {
+      clip.onStart?.()
+      return {
+        done: (clip.audio as Blob).text().then(async text => {
+          played.push(text)
+          if (text === 'First.') await firstDone.promise
+          return { throughMs: 10 }
+        }),
+        stop: async () => { firstDone.resolve(); return { throughMs: 0 } },
+      }
+    } })
+    const controller = new VoiceController({ speech: () => ({ playback, synthesize: async request => { requested.push(request.text); return new Blob([request.text]) } }) })
+    try {
+      const first = controller.openResponse({ sessionId: 'owner', turnId: 'first' })
+      const a = first.openSpeech({ purpose: 'answer' }); await a.write('First.'); a.end()
+      const firstFinished = first.finish()
+      await expect.poll(() => played).toEqual(['First.'])
+      const skipped = controller.openResponse({ sessionId: 'owner', turnId: 'skipped' })
+      skipped.cancel('Superseded notification')
+      await skipped.finish()
+      const last = controller.openResponse({ sessionId: 'owner', turnId: 'last' })
+      const c = last.openSpeech({ purpose: 'answer' }); await c.write('Last.'); c.end()
+      const lastFinished = last.finish()
+      await expect.poll(() => requested).toContain('Last.')
+      await new Promise(resolve => setTimeout(resolve, 30))
+      expect(played).toEqual(['First.'])
+      firstDone.resolve()
+      await Promise.all([firstFinished, lastFinished])
+      expect(played).toEqual(['First.', 'Last.'])
+    }
+    finally { firstDone.resolve(); await controller.close() }
+  })
+
   it('ends the speaking indicator only after cancelled audio becomes silent', async () => {
     const silence = Promise.withResolvers<{ throughMs: number }>()
     const started = vi.fn()

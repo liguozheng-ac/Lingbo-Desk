@@ -1,5 +1,5 @@
 import { request } from './client-api.mjs';
-import { taskView, approvalView, reportRequest, fileName } from './workspace-view.mjs';
+import { taskView, approvalView, reportRequest, fileName, exportedFiles } from './workspace-view.mjs';
 
 const $ = id => document.getElementById(id);
 const state = { token: '', owner: '', activeOwner: '', jobs: [], selected: null, compose: true, online: false, busy: false, files: [], pending: null };
@@ -46,7 +46,8 @@ function render() {
     $('task-meta').replaceChildren(node('span', `要求版本 ${job.version}`), node('span', job.modelProfile === 'ollama' ? '本地模型' : '云端模型'), node('span', `提交 ${time(job.createdAt)}`));
     $('pause').disabled = locked || !view.canPause; $('modify').disabled = locked || !view.canModify;
     $('resume').disabled = locked || !view.canResume || (job.uncertain && !$('reviewed').checked); $('cancel').disabled = locked || !view.canCancel || job.status === 'cancel_requested';
-    $('review-row').hidden = !view.canResume; $('task-error').hidden = !job.error; $('task-error').textContent = job.error || '';
+    const blocker = job.status === 'paused' && job.result ? `${job.error || '任务已暂停'}\n${job.error?.includes(job.result) ? '' : job.result}`.trim() : job.error;
+    $('review-row').hidden = !view.canResume; $('task-error').hidden = !blocker; $('task-error').textContent = blocker || '';
     $('read-count').textContent = view.readCount; $('write-count').textContent = view.writtenCount;
     $('activity-label').textContent = `${state.online ? '根据真实执行回执更新' : '连接恢复前不代表当前进展'}；阶段标记表示已有证据，不代表语义正确。`;
     $('phases').replaceChildren(...view.phases.map((p,i) => { const li = node('li', undefined, `step${p.done ? ' done' : ''}${view.active && view.current === i ? ' current' : ''}`); const body = node('div'); body.append(node('strong', p.title), node('p', p.detail)); li.append(node('span', p.done ? '✓' : String(i + 1), 'step-icon'), body); return li; }));
@@ -87,14 +88,19 @@ function renderSources(job) {
 function renderResults(job, locked) {
   $('result-badge').textContent = !job ? '等待任务' : job.status === 'completed' ? '实际文件' : '中间产物';
   $('result-badge').className = `tag${job?.status === 'completed' ? ' success' : ''}`;
-  const names = job?.artifacts || []; $('results').className = names.length ? '' : 'empty';
+  const names = job?.artifacts || [], exports = exportedFiles(job); $('results').className = names.length || exports.length ? '' : 'empty';
   $('results').replaceChildren(...names.map(name => {
     const row = node('div', undefined, 'result-file'); const button = node('button', '下载 ↗'); button.disabled = locked; button.onclick = () => download(job, name, button);
     row.append(node('span', name.split('.').at(-1).toUpperCase(), 'file-type'), node('span', name, 'name'));
     if (/\.(md|txt|csv)$/i.test(name)) { const preview = node('button', '预览'); preview.disabled = locked; preview.onclick = () => previewArtifact(job, name); row.append(preview); }
     row.append(button); return row;
   }));
-  if (!names.length) $('results').append(node('div', '尚无实际产物。完成后可在此下载并复核。'));
+  for (const file of exports) {
+    const row = node('div', undefined, 'result-file');
+    const detail = node('div'); detail.append(node('strong', file.name), node('p', `已复制到：${file.path}`, 'footnote'), node('p', `SHA256：${file.sha256}`, 'footnote'));
+    row.append(node('span', file.name.split('.').at(-1).toUpperCase(), 'file-type'), detail); $('results').append(row);
+  }
+  if (!names.length && !exports.length) $('results').append(node('div', '尚无实际产物。完成后可在此下载并复核。'));
   $('verification').hidden = !job?.verification;
   $('verification').textContent = job?.verification?.limitation || '';
 }
@@ -124,7 +130,7 @@ async function approve(data, owner, binding) {
 async function control(action, extra = {}, target = current()) {
   if (!target) return;
   const data = { taskId: target.id, action, version: target.version, ...extra };
-  await operation(async () => { const { task } = await api('/work/control', { owner: target.sessionId, data }); replaceTask(task); notice(action === 'pause' ? '已请求安全暂停，当前动作结束后会更新状态。' : action === 'cancel' ? '已请求取消；此前完成的操作会保留。' : action === 'modify' ? '新要求已保存，检查后点击“继续执行”。' : '已请求继续执行。'); });
+  await operation(async () => { const { task } = await api('/work/control', { owner: target.sessionId, data }); replaceTask(task); notice(action === 'pause' ? '已请求安全暂停，当前动作结束后会更新状态。' : action === 'cancel' ? '已请求取消；此前完成的操作会保留。' : action === 'modify' ? '新要求已保存，检查后点击“继续执行”。' : '已请求继续执行，以下方实际状态为准；原有权限不会自动改变。'); });
 }
 async function openSource(job, source) {
   try {

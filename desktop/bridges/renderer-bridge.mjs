@@ -12,6 +12,7 @@ import { toast } from 'vue-sonner'
 import { parseCommand, personalInput } from './lingbo-commands'
 import { attachVoiceDiagnostics } from './lingbo-voice'
 import { bridgeSchemas } from './lingbo-work-schema'
+import { createTaskNoticeQueue, taskNoticeBusy } from './lingbo-task-notices'
 
 // Only the main Stage owns this connection. Settings and chat windows share it.
 const leader = new URL(location.href).searchParams.get('synced-leader') === 'true'
@@ -83,6 +84,16 @@ async function start() {
   })))
   status.workToolNames = bridgeSchemas.map(s => s.function.name)
   const voice = attachVoiceDiagnostics(pinia, report)
+  const notices = createTaskNoticeQueue({
+    isBusy(sessionId) {
+      const host = pinia._s.get('voice')
+      return taskNoticeBusy({ sessionId, activeSessionId: sessions.activeSessionId,
+        sending: chat.sending, inputActive: !!host?.controller.activeInput,
+        inputPhase: host?.state?.phase, activeTurns: host?.activeTurns })
+    },
+    deliver: (sessionId, notice) => chat.notifyConversation(sessionId, notice),
+    onError: error => { status.lastError = error.message },
+  })
   let heartbeat
   const removeBeforeSend = chat.onBeforeSend(async (message, context) => {
     const command = parseCommand(message)
@@ -130,6 +141,7 @@ async function start() {
     lifetime.abort()
     clearInterval(heartbeat)
     voice.close()
+    notices.close()
     removeBeforeSend()
     removeAfterSend()
     removeModelAction()
@@ -155,7 +167,7 @@ async function start() {
       ? `报告已经生成，可以在本机任务台${task.sourceId ? '下载 Word 报告' : '查看报告'}。`
       : task.status === 'cancelled' ? '报告任务已经取消。' : '报告任务失败，请在本机任务测试台查看错误。'
     toast(text)
-    await chat.notifyConversation(task.sessionId, { source: 'lingbo-report-task', text: `聆泊任务 ${task.id}：${text} 请简短告知用户，不执行新任务。` })
+    notices.enqueue(`report:${task.id}`, task.sessionId, { source: 'lingbo-report-task', text: `聆泊任务 ${task.id}：${text} 请简短告知用户，不执行新任务。` })
     status.notices++
     await report('notice.accepted', { taskId: task.id, sessionId: task.sessionId, status: task.status })
   }
@@ -169,7 +181,7 @@ async function start() {
         localStorage.setItem(noticeKey, JSON.stringify([...notified].slice(-100)))
         const text = task.approval ? '工作任务需要确认，请打开本机任务台查看具体动作。' : task.status === 'completed' ? '工作任务已结束，可以在任务台查看产物和执行回执。' : '工作任务未完成，请在任务台查看原因。'
         toast(text)
-        await chat.notifyConversation(task.sessionId, { source: 'lingbo-work-task', text: `${text} 任务编号 ${task.id}。这是状态通知，不执行新任务。` })
+        notices.enqueue(`work:${task.id}`, task.sessionId, { source: 'lingbo-work-task', text: `${text} 任务编号 ${task.id}。这是状态通知，不执行新任务。只用一两句简短汇报，具体过程留在任务台。` })
       }
       return
     }

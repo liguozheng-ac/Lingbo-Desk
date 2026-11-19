@@ -385,7 +385,7 @@ export class SpeechStream {
 export class VoiceResponse {
   private readonly abort = new AbortController()
   private readonly streams: SpeechStream[] = []
-  private ordered: Promise<unknown> = Promise.resolve()
+  private ordered: Promise<unknown>
   private sealed = false
   private outcome: 'finished' | 'cancelled' | 'interrupted' | 'failed' | undefined
   private finishing: Promise<'finished' | 'cancelled' | 'interrupted' | 'failed'> | undefined
@@ -394,7 +394,8 @@ export class VoiceResponse {
   readonly playback: PlaybackGroup
   readonly turn: TurnRef
 
-  constructor(turn: TurnRef, private readonly output: SpeechOutput, private readonly onClosed: () => void) {
+  constructor(turn: TurnRef, private readonly output: SpeechOutput, private readonly onClosed: () => void, previous: Promise<unknown> = Promise.resolve()) {
+    this.ordered = previous
     this.turn = Object.freeze({ ...turn })
     this.playback = output.playback.openGroup(`${turn.sessionId}:${turn.turnId}`)
   }

@@ -6,9 +6,13 @@ import { hashFile } from './work-policy.mjs';
 export function normalizeAcceptance(value = []) {
   if (!Array.isArray(value) || value.length > 8 || JSON.stringify(value).length > 16000) throw new Error('验收条件须为最多 8 项、总计不超过 16000 字符的数组');
   return value.map(item => {
-    if (!item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).some(k => !['path', 'contains', 'notContains', 'sha256'].includes(k))) throw new Error('验收条件字段无效');
+    if (!item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).some(k => !['path', 'contains', 'notContains', 'sha256', 'allowRename'].includes(k))) throw new Error('验收条件字段无效');
     if (typeof item.path !== 'string' || !item.path.trim() || item.path.length > 2000) throw new Error('验收目标路径无效');
     const condition = { path: item.path };
+    if (item.allowRename !== undefined) {
+      if (typeof item.allowRename !== 'boolean') throw new Error('验收另存选项必须为布尔值');
+      condition.allowRename = item.allowRename;
+    }
     for (const key of ['contains', 'notContains']) {
       if (item[key] === undefined) continue;
       if (!Array.isArray(item[key]) || item[key].length > 8 || item[key].some(s => typeof s !== 'string' || !s.length || s.length > 2000)) throw new Error('验收正文条件须为最多 8 个非空短语');
@@ -27,7 +31,9 @@ export async function verifyAcceptance(job, tools) {
   const samePath = (a, b) => typeof a === 'string' && path.relative(a, b) === '';
   for (const condition of conditions) {
     job.controller.signal.throwIfAborted();
-    const target = tools.resolve(job, condition.path);
+    const requested = tools.resolve(job, condition.path);
+    const exported = condition.allowRename ? job.receipts.findLast(r => r.ok && r.mutation && r.version === job.version && r.tool === 'work_export' && samePath(r.requestedPath, requested)) : null;
+    const target = tools.resolve(job, exported?.path || requested);
     // A different file or a read-only receipt cannot satisfy an output contract.
     const receipt = job.receipts.findLast(r => r.ok && r.mutation && r.version === job.version && samePath(r.path, target));
     if (!receipt?.sha256 || receipt.tool === 'work_delete') throw new Error('验收目标缺少当前版本的文件动作回执');
